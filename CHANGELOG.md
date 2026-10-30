@@ -1,5 +1,10 @@
 # Changelog
 
+Unreleased — 2026-10-31
+
+- Validate the local Apple Silicon editable build, native loading, both info entry points, all 30 offline tests without skips, and ASan/UBSan checks on macOS 14.8.9 / Python 3.11.6 / libusb 1.0.30.
+- Update validation, setup status and development handoff documentation; Intel Mac and real-hardware acceptance remain pending. No driver or vendor changes were needed.
+
 0.1.0 — 2026-10-30
 
 - Name the independent project GPIB-MacARM, distribution/CLI gpib-macarm, import gpib_macarm.
@@ -12,4 +17,4 @@
 - Carry USB per-transfer timeouts and error identities through the POSIX shim.
 - Serialize query transactions; clean up EOS on failures; never retry writes automatically.
 - Include reproducible upstream manifest, patch, licensing, offline tests and Mac acceptance steps.
-- Hardware and macOS/Apple Silicon validation remain pending; see docs/VALIDATION.md.
+- At initial delivery, hardware and macOS/Apple Silicon validation were pending; see docs/VALIDATION.md for subsequent results.

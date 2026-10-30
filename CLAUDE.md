@@ -35,7 +35,9 @@ vendor/kame/NiGpibDriver.* 作为上游参考保留，不参与本包构建；�
 
 已验证：Windows Python 3.14 的纯 Python 测试；WSL2 Linux x86_64 / Python 3.10.12 / GCC 11.4 的原生编译、加载、wheel/源码 zip 构建与项目内独立安装。Linux 30 项 unittest 全通过，包含 22 项 API、2 项交付/来源完整性、6 项原生解析器/C ABI 测试。ASan/UBSan 覆盖 20,000 个畸形/短回包，以及模拟 URB 的动态超时和错误映射。
 
-尚未验证：Mac 编译、Apple Silicon/Intel ABI、真实 NI 适配器/仪器、首次冷启动寻址、REN/IFC、终止符、长期采集和拔插/断电恢复。Linux USB 枚举为空，不能把它写成实物通信成功。
+2026-10-31 新增实际验证：macOS 14.8.9 / arm64 / Python 3.11.6 / Apple Clang 15.0.0 / Homebrew libusb 1.0.30，editable 编译安装、ctypes 原生加载、模块和 CLI 的 info 成功；30 项 unittest 全通过且无跳过，ASan/UBSan 两个程序通过（含 20,000 个畸形/短回包）。无需修改构建脚本或 vendor，本地日志见 build/validation/。
+
+尚未验证：Intel Mac、其他 macOS/Python 组合、Mac 非 editable 安装、真实 NI 适配器/仪器、首次冷启动寻址、REN/IFC、终止符、长期采集和拔插/断电恢复。本轮 Mac 只做离线验收，未打开适配器或执行仪器查询。Linux USB 枚举为空，不能把它写成实物通信成功。
 
 本次重命名后已再次完成 Linux 原生构建、30 项测试、sanitizer 检查和新包名的源码 zip/wheel 独立安装；CLI 与导入名也已核对。最终事实以 docs/VALIDATION.md 和实际执行结果为准。
 

@@ -1,6 +1,6 @@
 # Mac 编译与实机验收
 
-交付环境没有 Mac 或实际 USB-GPIB 仪器。下面用于在你的 Mac 上完成余下验收。
+2026-10-31 已在 macOS 14.8.9 / arm64 / Python 3.11.6 完成本机 editable 构建、原生加载、30 项离线测试（无跳过）及 sanitizer 检查，详见 [验证记录](VALIDATION.md)。实际 USB-GPIB 转接线和仪器尚未验收。下面保留完整流程：在新环境复现构建后，使用明确选择的仪器继续实物步骤。
 
 1. 解压源码包进入 gpib-macarm。按 README 安装 Xcode Command Line Tools、Python 3.10+、libusb、pkg-config，创建 venv 并 pip install .。
 2. 运行 uname -m、`python -c 'import platform; print(platform.machine())'`、brew --prefix，确认 Python 和 libusb 同架构。Apple Silicon 建议 arm64 加 /opt/homebrew；Intel 使用 x86_64 环境。

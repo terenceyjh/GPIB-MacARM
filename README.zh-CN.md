@@ -8,6 +8,18 @@ Python → 标准库 ctypes → 本包的 C ABI → KAME/linux-gpib C 驱动 →
 
 不需要 NI-488.2、NI-VISA、Qt、完整 KAME、内核模块或 MCP 服务。Python 接口接近常用 PyVISA 写法，但本包不是 PyVISA 后端，也不承诺完整 VISA API。
 
+**验证记录**
+
+| 日期 | 环境 | 实际结果 |
+| --- | --- | --- |
+| 2026-10-30 | Windows / Python 3.14 | Python API 离线测试通过；原生测试按平台跳过。 |
+| 2026-10-30 | WSL2 Linux x86_64 / Python 3.10.12 / GCC 11.4 | 原生编译与加载、30 项离线测试、ASan/UBSan，以及 wheel/源码压缩包的干净安装均通过。 |
+| 2026-10-31 | macOS 14.8.9 arm64 / Python 3.11.6 / Apple Clang 15.0.0 / libusb 1.0.30 | editable 编译安装、原生加载、模块与 CLI 的 `info`、30 项离线测试（0 跳过）及 ASan/UBSan 均通过。 |
+
+本次 Mac 测试包括 22 项 Python API、2 项交付/来源完整性和 6 项实际原生解析器/C ABI 测试。Linux 与 Mac 的 sanitizer 检查均覆盖 20,000 个畸形/短回包，以及模拟 USB 超时传递、错误映射和完成回调。
+
+**实物验收仍待完成。** 本轮 Mac 未打开适配器，未发送 REN/IFC 或仪器查询；USB/GPIB 通信、长期采集、拔插/断电恢复，以及 Intel Mac 和 Mac 非 editable 干净安装尚未验证。完整环境、命令与边界见 [验证记录](docs/VALIDATION.md)，后续按 [Mac 验收清单](docs/MAC_ACCEPTANCE.md) 使用明确选择的转接线和仪器继续测试。
+
 **Mac 编译安装**
 
 要求 macOS、同架构的 Python 3.10+、Xcode Command Line Tools、libusb 和 pkg-config。
@@ -125,7 +137,7 @@ python tools/hardware_smoke.py --address 22 --count 100
 
 macOS 无 NI 驱动占用时一般无需 sudo；如提示 BUSY/ACCESS，检查 NI-488.2、其他进程和 USB 配件授权设置。不要用关闭系统安全机制替代定位问题。诊断信息会报告原生库路径；遇到 incompatible architecture 或 Library not loaded，应检查 Python/libusb 架构并重新编译。
 
-这是提取和加固后的 0.1.0 初版，非 NI 官方驱动。交付时的真实验证范围以 docs/VALIDATION.md 为准；在没有 Mac 和实物验证前，不能声称已经通过 Apple Silicon 或长期采集验收。
+这是提取和加固后的 0.1.0 初版，非 NI 官方驱动。已完成的离线测试及剩余实物验收边界见上方验证记录与 [详细记录](docs/VALIDATION.md)。
 
 **来源与许可**
 

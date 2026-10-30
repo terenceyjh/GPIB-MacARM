@@ -14,9 +14,21 @@ No NI-488.2, NI-VISA, Qt, complete KAME installation, kernel module, or backgrou
 
 ## Status
 
-**Early development, version 0.1.0. macOS/Apple Silicon is the target platform; Mac builds and real-instrument communication have not yet been validated.**
+**Early development, version 0.1.0. A local Apple Silicon source build and offline tests have passed on macOS 14.8.9 / Python 3.11.6. Real-instrument communication remains unvalidated.**
 
-The shared POSIX implementation has been compiled and installed on Linux x86_64. Thirty offline tests pass, including the native parser and C ABI. AddressSanitizer/UndefinedBehaviorSanitizer checks exercised 20,000 malformed/short packets. These checks do not establish hardware compatibility. See the [validation record](docs/VALIDATION.md).
+The shared POSIX implementation has been compiled and installed on Linux x86_64 and macOS arm64 (editable install). The completed checks are recorded below; full environments, commands and remaining limits are in the [validation record](docs/VALIDATION.md).
+
+## Validation record
+
+| Date | Environment | Verified results |
+| --- | --- | --- |
+| 2026-10-30 | Windows / Python 3.14 | Python API offline tests passed; native tests were skipped on this platform. |
+| 2026-10-30 | WSL2 Linux x86_64 / Python 3.10.12 / GCC 11.4 | Native build/load, all 30 offline tests, ASan/UBSan checks, and clean wheel/source-archive installation passed. |
+| 2026-10-31 | macOS 14.8.9 arm64 / Python 3.11.6 / Apple Clang 15.0.0 / libusb 1.0.30 | Editable build/install, native loading, both `info` entry points, all 30 offline tests with zero skips, and ASan/UBSan checks passed. |
+
+The Mac test run includes 22 Python API tests, 2 distribution/provenance tests and 6 native parser/C ABI tests. The sanitizer programs exercised 20,000 malformed/short packets and verified simulated USB timeout propagation, error mapping and completion callbacks on both Linux and Mac.
+
+**Hardware acceptance is still pending.** The Mac run did not open an adapter or send REN/IFC or instrument queries. USB/GPIB communication, long-term acquisition and recovery after unplugging or power loss remain untested, as do Intel Mac builds and clean non-editable Mac installations. Continue with the [Mac acceptance checklist](docs/MAC_ACCEPTANCE.md) for a specific adapter and instrument.
 
 ## What it provides
 

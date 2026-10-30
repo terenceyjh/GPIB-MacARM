@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+build/
+dist/
+*.egg-info/
+src/gpib_macarm/_driver.*
+.DS_Store
+.pytest_cache/
+*.log
+hardware-smoke*.json
+readings.csv

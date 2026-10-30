@@ -1,0 +1,97 @@
+{
+  "upstream": "https://github.com/northriv/KAME",
+  "commit": "f451025dc4215c5d85f39b71303f9008ccee66bc",
+  "subdirectory": "modules/charinterface/usermode-linux-gpib",
+  "linux_gpib_base": "4.3.6 / 9813ff8f",
+  "license": "GPL-2.0-or-later",
+  "files": {
+    "NiGpibDriver.cpp": {
+      "upstream_sha256": "b2afe823c821d77f0b33cacb97385b7f07ed7c814c7595d5b35621b3f4863ad3",
+      "local_sha256": "b2afe823c821d77f0b33cacb97385b7f07ed7c814c7595d5b35621b3f4863ad3"
+    },
+    "NiGpibDriver.h": {
+      "upstream_sha256": "89874a92e27150ceca58b5325e259225f3e88a9e748e205853fee541a97abc63",
+      "local_sha256": "89874a92e27150ceca58b5325e259225f3e88a9e748e205853fee541a97abc63"
+    },
+    "README": {
+      "upstream_sha256": "fbdab488b1ee6418a0b8b5167d56bb6da843b1fab2541b00c762735b5ccc458b",
+      "local_sha256": "fbdab488b1ee6418a0b8b5167d56bb6da843b1fab2541b00c762735b5ccc458b"
+    },
+    "compat.h": {
+      "upstream_sha256": "94c7cbcac3d3c53fb39df066e255336aad454288a3916c74a3cd0de18d708ae4",
+      "local_sha256": "94c7cbcac3d3c53fb39df066e255336aad454288a3916c74a3cd0de18d708ae4"
+    },
+    "gpib_stubs.c": {
+      "upstream_sha256": "f7352f5a794ac81d25d8c398517e97ba04607df288f487aa09b5d6caa567cf89",
+      "local_sha256": "f7352f5a794ac81d25d8c398517e97ba04607df288f487aa09b5d6caa567cf89"
+    },
+    "linux-gpib/AUTHORS": {
+      "upstream_sha256": "ef1581654ecf6af4b51f0f45f083faf91df04e24e7333d0219f88263a4a6b9da",
+      "local_sha256": "ef1581654ecf6af4b51f0f45f083faf91df04e24e7333d0219f88263a4a6b9da"
+    },
+    "linux-gpib/COPYING": {
+      "upstream_sha256": "189b1af95d661151e054cea10c91b3d754e4de4d3fecfb074c1fb29476f7167b",
+      "local_sha256": "189b1af95d661151e054cea10c91b3d754e4de4d3fecfb074c1fb29476f7167b"
+    },
+    "linux-gpib/README": {
+      "upstream_sha256": "ce21460225e62cab51367a56fb573812a87665da060fcf7ab86734fb0d0949a2",
+      "local_sha256": "ce21460225e62cab51367a56fb573812a87665da060fcf7ab86734fb0d0949a2"
+    },
+    "linux-gpib/gpib.h": {
+      "upstream_sha256": "880c5aeba596aaa29303b360748f3b19ab8680c57650898dd6c69ec8b34ebe11",
+      "local_sha256": "880c5aeba596aaa29303b360748f3b19ab8680c57650898dd6c69ec8b34ebe11"
+    },
+    "linux-gpib/gpibP.h": {
+      "upstream_sha256": "ac544ebf7256fdb32aecdaf1b8d29d8b67321863b8fa4c44adf12b10346ae63c",
+      "local_sha256": "ac544ebf7256fdb32aecdaf1b8d29d8b67321863b8fa4c44adf12b10346ae63c"
+    },
+    "linux-gpib/gpib_ioctl.h": {
+      "upstream_sha256": "52a9bf7d71c6b4c2cb887a290f91a31b5fbf5c0909bdc2a933ae287927b9295b",
+      "local_sha256": "52a9bf7d71c6b4c2cb887a290f91a31b5fbf5c0909bdc2a933ae287927b9295b"
+    },
+    "linux-gpib/gpib_proto.h": {
+      "upstream_sha256": "1de959f4008fe23871d87108a168e15e00cf1c3205dfd70cce7856631934e85e",
+      "local_sha256": "1de959f4008fe23871d87108a168e15e00cf1c3205dfd70cce7856631934e85e"
+    },
+    "linux-gpib/gpib_state_machines.h": {
+      "upstream_sha256": "4b0e52088c22eb2c136793c669a11b58317fb00f837f8e19676df196232b834f",
+      "local_sha256": "4b0e52088c22eb2c136793c669a11b58317fb00f837f8e19676df196232b834f"
+    },
+    "linux-gpib/gpib_types.h": {
+      "upstream_sha256": "17ac6637402a490c7d83b05dc556b15c57652d6d29ecaf8ba75d3f5073ff3441",
+      "local_sha256": "17ac6637402a490c7d83b05dc556b15c57652d6d29ecaf8ba75d3f5073ff3441"
+    },
+    "linux-gpib/gpib_user.h": {
+      "upstream_sha256": "969f5e463d2673d9b2d0072bc8341810bc33c97c715c1887c8d842037221950f",
+      "local_sha256": "969f5e463d2673d9b2d0072bc8341810bc33c97c715c1887c8d842037221950f"
+    },
+    "linux-gpib/nec7210.h": {
+      "upstream_sha256": "08d08e0c909355172e53834c3e33bcbcc1b0236f1dccf03f82a886992b11b6c6",
+      "local_sha256": "08d08e0c909355172e53834c3e33bcbcc1b0236f1dccf03f82a886992b11b6c6"
+    },
+    "linux-gpib/nec7210_registers.h": {
+      "upstream_sha256": "2efed18bbc44feda83658f5b7d6461178a30f38d222e232ebab25ef6a24df23e",
+      "local_sha256": "2efed18bbc44feda83658f5b7d6461178a30f38d222e232ebab25ef6a24df23e"
+    },
+    "linux-gpib/ni_usb_gpib.c": {
+      "upstream_sha256": "a4750698cfbf5b7a5e47a4d18c27ccdada7fb705f99d5b890b4d269db2a314b9",
+      "local_sha256": "144aaaf39ebbc3b6927cce015ba792359ad4586727987b9cfa920704eae3feba"
+    },
+    "linux-gpib/ni_usb_gpib.h": {
+      "upstream_sha256": "1959cc09c1f1591e29d9f4b0645b92b901e6af1a1f33552d65eb505ce2aa5724",
+      "local_sha256": "1959cc09c1f1591e29d9f4b0645b92b901e6af1a1f33552d65eb505ce2aa5724"
+    },
+    "linux-gpib/tnt4882_registers.h": {
+      "upstream_sha256": "5a3147a59a7078e8ae6c1f1b4e8a5a6ebbbe9072ffe50d37744daf433429e7f3",
+      "local_sha256": "5a3147a59a7078e8ae6c1f1b4e8a5a6ebbbe9072ffe50d37744daf433429e7f3"
+    },
+    "osx_compat.h": {
+      "upstream_sha256": "721b1297b4fb457419a6d15f5282d9bb4aa550a363bd1a036fe4add932a759cd",
+      "local_sha256": "621bee510764615c8d400b609a955b6d0d4c96ccdea357e5a74aaa44a31b4d84"
+    },
+    "win_compat.h": {
+      "upstream_sha256": "f8d5f489713b73c5f2ae944a999a9c27b832b39e68ab01cd650b8c4fc63fccc5",
+      "local_sha256": "f8d5f489713b73c5f2ae944a999a9c27b832b39e68ab01cd650b8c4fc63fccc5"
+    }
+  }
+}

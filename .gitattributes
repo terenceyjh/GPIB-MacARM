@@ -1,0 +1,12 @@
+* text=auto eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.sh text eol=lf
+*.c text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+# Preserve the exact vendored snapshot bytes used by UPSTREAM.json hashes.
+vendor/kame/** -text -whitespace linguist-vendored
+vendor/local-fixes.patch -text -whitespace linguist-vendored

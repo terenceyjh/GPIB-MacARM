@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpib-macarm"
+version = "0.1.0"
+description = "Python GPIB communication for Apple Silicon Macs, derived from KAME and linux-gpib"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-2.0-or-later"
+license-files = ["LICENSE", "THIRD_PARTY.md", "vendor/kame/linux-gpib/COPYING"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+]
+
+[project.scripts]
+gpib-macarm = "gpib_macarm.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/terenceyjh/GPIB-MacARM"
+Source = "https://github.com/terenceyjh/GPIB-MacARM"
+Issues = "https://github.com/terenceyjh/GPIB-MacARM/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+gpib_macarm = ["py.typed"]

@@ -1,0 +1,403 @@
+--- a/linux-gpib/ni_usb_gpib.c
++++ b/linux-gpib/ni_usb_gpib.c
+@@ -135,6 +135,9 @@
+ 	context->timed_out = 0;
+ 	usb_fill_bulk_urb(ni_priv->bulk_urb, usb_dev, out_pipe, data, data_length,
+ 		&ni_usb_bulk_complete, context);
++#ifndef __KERNEL__
++	ni_priv->bulk_urb->timeout_ms = (unsigned int)timeout_msecs;
++#endif
+ 
+ 	if(timeout_msecs)
+ 		mod_timer(&ni_priv->bulk_timer, jiffies + msecs_to_jiffies(timeout_msecs));
+@@ -218,6 +221,9 @@
+ 	context->timed_out = 0;
+ 	usb_fill_bulk_urb(ni_priv->bulk_urb, usb_dev, in_pipe, data, data_length,
+ 		&ni_usb_bulk_complete, context);
++#ifndef __KERNEL__
++	ni_priv->bulk_urb->timeout_ms = (unsigned int)timeout_msecs;
++#endif
+ 
+ 	if(timeout_msecs)
+ 		mod_timer(&ni_priv->bulk_timer, jiffies + msecs_to_jiffies(timeout_msecs));
+@@ -431,98 +437,43 @@
+ 	return i;
+ };
+ 
+-int parse_board_ibrd_readback(const uint8_t *raw_data, struct ni_usb_status_block *status,
+-	uint8_t *parsed_data, int parsed_data_length, int *actual_bytes_read)
+-{
+-	static const int ibrd_data_block_length = 0xf;
+-	static const int ibrd_extended_data_block_length = 0x1e;
+-	int data_block_length = 0;
+-	int i = 0;
+-	int j = 0;
+-	int k;
+-	unsigned int adr1_bits;
+-	int num_data_blocks = 0;
+-	struct ni_usb_status_block register_write_status;
+-	int unexpected = 0;
+-
+-	while(raw_data[i] == NIUSB_IBRD_DATA_ID || raw_data[i] == NIUSB_IBRD_EXTENDED_DATA_ID)
+-	{
+-		if(raw_data[i] == NIUSB_IBRD_DATA_ID)
+-		{
+-			data_block_length = ibrd_data_block_length;
+-		}else if(raw_data[i] == NIUSB_IBRD_EXTENDED_DATA_ID)
+-		{
+-			data_block_length = ibrd_extended_data_block_length;
+-			if(raw_data[++i] != 0)
+-			{
+-				printk("%s: %s: unexpected data: raw_data[%i]=0x%x, expected 0\n",
+-					__FILE__, __FUNCTION__, i, (int)raw_data[i]);
+-				unexpected = 1;
+-			}
+-		}else
+-		{
+-			printk("%s: logic bug!\n", __FILE__);
+-			return -EINVAL;
+-		}
+-		++i;
+-		for(k = 0; k < data_block_length; k++)
+-		{
+-			if(j < parsed_data_length)
+-				parsed_data[j++] = raw_data[i++];
+-			else
+-				++i;
+-		}
+-		++num_data_blocks;
+-	}
+-	i += ni_usb_parse_status_block(&raw_data[i], status);
+-	if(status->id != NIUSB_IBRD_STATUS_ID)
+-	{
+-		printk("%s: bug: status->id=%i, != ibrd_status_id\n", __FILE__, status->id);
+-		return -EIO;
+-	}
+-	adr1_bits = raw_data[i++];
+-	if(num_data_blocks)
+-		*actual_bytes_read = (num_data_blocks - 1) * data_block_length + raw_data[i++];
+-	else
+-	{
+-		++i;
+-		*actual_bytes_read = 0;
+-	}
+-	if(*actual_bytes_read > j)
+-	{
+-		printk("%s: bug: discarded data. actual_bytes_read=%i, j=%i\n", __FILE__, *actual_bytes_read, j);
+-	}
+-	for(k = 0; k < 2; k++)
+-		if(raw_data[i++] != 0)
+-		{
+-			printk("%s: %s: unexpected data: raw_data[%i]=0x%x, expected 0\n",
+-				__FILE__, __FUNCTION__, i - 1, (int)raw_data[i - 1]);
+-			unexpected = 1;
+-		}
+-	i += ni_usb_parse_status_block(&raw_data[i], &register_write_status);
+-	if(register_write_status.id != NIUSB_REG_WRITE_ID)
+-	{
+-		printk("%s: %s: unexpected data: register write status id=0x%x, expected 0x%x\n",
+-			__FILE__, __FUNCTION__, register_write_status.id, NIUSB_REG_WRITE_ID);
+-		unexpected = 1;
+-	}
+-	if(raw_data[i++] != 2)
+-	{
+-		printk("%s: %s: unexpected data: register write count=%i, expected 2\n",
+-			__FILE__, __FUNCTION__, (int)raw_data[i - 1]);
+-		unexpected = 1;
+-	}
+-	for(k = 0; k < 3; k++)
+-		if(raw_data[i++] != 0)
+-		{
+-			printk("%s: %s: unexpected data: raw_data[%i]=0x%x, expected 0\n",
+-				__FILE__, __FUNCTION__, i - 1, (int)raw_data[i - 1]);
+-			unexpected = 1;
+-		}
+-	i += ni_usb_parse_termination_block(&raw_data[i]);
+-	if(unexpected)
+-		ni_usb_dump_raw_block(raw_data, i);
+-	return i;
++
++/* gpib-macarm 2026-10-30: bounds-aware NI IBRD parser. The original parser
++ * had no received-length argument and could read beyond a short USB packet. */
++int parse_board_ibrd_readback(const uint8_t *raw, int raw_length,
++    struct ni_usb_status_block *status, uint8_t *data, int capacity, int *actual)
++{
++    int i=0, total=0, copied=0, last_block=0, blocks=0, k;
++    struct ni_usb_status_block reg;
++    if (!raw || !status || !data || !actual || raw_length < 0 || capacity < 0)
++        return -EPROTO;
++    *actual=0;
++    while (i < raw_length && (raw[i] == NIUSB_IBRD_DATA_ID || raw[i] == NIUSB_IBRD_EXTENDED_DATA_ID)) {
++        int length=raw[i++] == NIUSB_IBRD_DATA_ID ? 15 : 30;
++        if (length == 30) { if (i >= raw_length || raw[i++] != 0) return -EPROTO; }
++        if (raw_length-i < length) return -EPROTO;
++        for (k=0; k<length; ++k) {
++            if (copied < capacity) data[copied++]=raw[i+k];
++        }
++        i+=length; total+=length; last_block=length; ++blocks;
++    }
++    /* status(8), ADR1/last/padding(4), register status(8), count/pad(4), TERM(4) */
++    if (raw_length-i != 28) return -EPROTO;
++    ni_usb_parse_status_block(raw+i,status); i+=8;
++    if (status->id != NIUSB_IBRD_STATUS_ID) return -EPROTO;
++    ++i; /* ADR1 */
++    k=raw[i++];
++    if ((!blocks && k != 0) || (blocks && k > last_block)) return -EPROTO;
++    *actual=blocks ? total-last_block+k : 0;
++    if (*actual > capacity || *actual > copied) return -EPROTO;
++    if (raw[i++] || raw[i++]) return -EPROTO;
++    ni_usb_parse_status_block(raw+i,&reg); i+=8;
++    if (reg.id != NIUSB_REG_WRITE_ID || reg.error_code != NIUSB_NO_ERROR) return -EPROTO;
++    if (raw[i++] != 2) return -EPROTO;
++    for (k=0;k<3;++k) if (raw[i++]) return -EPROTO;
++    if (raw[i++] != NIUSB_TERM_ID) return -EPROTO;
++    for (k=0;k<3;++k) if (raw[i++]) return -EPROTO;
++    return i;
+ }
+ 
+ int ni_usb_parse_reg_write_status_block(const uint8_t *raw_data, struct ni_usb_status_block *status, int *writes_completed)
+@@ -701,7 +652,7 @@
+ 		kfree(in_data);
+ 		return retval;
+ 	}
+-	parse_retval = parse_board_ibrd_readback(in_data, &status, buffer, length, &actual_length);
++	parse_retval = parse_board_ibrd_readback(in_data, usb_bytes_read, &status, buffer, length, &actual_length);
+ 	if(parse_retval != usb_bytes_read)
+ 	{
+ 		if(parse_retval >= 0) parse_retval = -EIO;
+@@ -716,10 +667,12 @@
+ 	   the userspace port, where the freed block is immediately recycled by
+ 	   the process allocator.  Free after the last read instead.  Reported by
+ 	   GCC as -Wuse-after-free. */
+-	if(actual_length != length - status.count)
++	if(status.count > length || actual_length != (int)(length - status.count))
+ 	{
+ 		printk("%s: %s: actual_length=%i expected=%li\n", __FILE__, __FUNCTION__, actual_length, (long)(length - status.count));
+ 		ni_usb_dump_raw_block(in_data, usb_bytes_read);
++		kfree(in_data);
++		return -EPROTO;
+ 	}
+ 	kfree(in_data);
+ 	switch(status.error_code)
+@@ -825,10 +778,11 @@
+ 	{
+ 		printk("%s: %s: ni_usb_receive_bulk_msg returned %i, usb_bytes_read=%i\n", __FILE__, __FUNCTION__, retval, usb_bytes_read);
+ 		kfree(in_data);
+-		return retval;
++		return retval ? retval : -EPROTO;
+ 	}
+ 	ni_usb_parse_status_block(in_data, &status);
+ 	kfree(in_data);
++	if (status.id != 0x0d || status.count > length) return -EPROTO;
+ 	switch(status.error_code)
+ 	{
+ 	case NIUSB_NO_ERROR:
+@@ -923,10 +877,11 @@
+ 	{
+ 		printk("%s: %s: ni_usb_receive_bulk_msg returned %i, bytes_read=%i\n", __FILE__, __FUNCTION__, retval, bytes_read);
+ 		kfree(in_data);
+-		return retval;
++		return retval ? retval : -EPROTO;
+ 	}
+ 	ni_usb_parse_status_block(in_data, &status);
+ 	kfree(in_data);
++	if (status.id != 0x0c || status.count > length) return -EPROTO;
+ 	*command_bytes_written = length - status.count;
+ 	switch(status.error_code)
+ 	{
+@@ -936,6 +891,8 @@
+ 		/*this is expected if ni_usb_receive_bulk_msg got interrupted by a signal
+ 			and returned -ERESTARTSYS */
+ 		break;
++	case NIUSB_TIMEOUT_ERROR:
++		return -ETIMEDOUT;
+ 	case NIUSB_NO_BUS_ERROR:
+ 		return -ENOTCONN;
+ 		break;
+@@ -1024,7 +981,7 @@
+ 		if(retval == 0) retval = -EIO;
+ 		printk("%s: %s: ni_usb_receive_bulk_msg returned %i, bytes_read=%i\n", __FILE__, __FUNCTION__, retval, bytes_read);
+ 		kfree(in_data);
+-		return retval;
++		return retval ? retval : -EPROTO;
+ 	}
+ 	ni_usb_parse_status_block(in_data, &status);
+ 	kfree(in_data);
+@@ -1826,6 +1783,7 @@
+ 		return;
+ 	}
+ 
++	if (urb->actual_length < 8) return; /* gpib-macarm: truncated interrupt status */
+ 	ni_usb_parse_status_block(urb->transfer_buffer, &status);
+ // 	printk("debug: ibsta=0x%x\n", status.ibsta);
+ 
+@@ -2573,3 +2531,32 @@
+ 
+ module_init(ni_usb_init_module);
+ module_exit(ni_usb_exit_module);
++
++/* gpib-macarm: checked controls for the standalone wrapper. */
++int kg_ni_remote(gpib_board_t *board, int enabled)
++{
++    ni_usb_private_t *p=board->private_data;
++    struct ni_usb_register reg;
++    unsigned int ibsta;
++    reg.device=NIUSB_SUBDEV_TNT4882;
++    reg.address=nec7210_to_tnt4882_offset(AUXMR);
++    reg.value=enabled ? AUX_SREN : AUX_CREN;
++    return ni_usb_write_registers(p,&reg,1,&ibsta);
++}
++int kg_ni_ifc(gpib_board_t *board)
++{
++    ni_usb_private_t *p=board->private_data;
++    uint8_t out[8]={NIUSB_IBSIC_ID,0,0,0,NIUSB_TERM_ID,0,0,0}, in[16];
++    int sent=0, received=0, r;
++    struct ni_usb_status_block status;
++    r=ni_usb_send_bulk_msg(p,out,sizeof(out),&sent,1000);
++    if(r) return r;
++    if(sent != sizeof(out)) return -EPROTO;
++    r=ni_usb_receive_bulk_msg(p,in,sizeof(in),&received,1000,0);
++    if(r) return r;
++    if(received != 12) return -EPROTO;
++    ni_usb_parse_status_block(in,&status);
++    if(status.id != NIUSB_IBSIC_ID || status.error_code) return -EPROTO;
++    ni_usb_soft_update_status(board,status.ibsta,0);
++    return 0;
++}
+--- a/osx_compat.h
++++ b/osx_compat.h
+@@ -367,7 +367,7 @@
+     void            (*function)(COMPAT_TIMER_ARG_TYPE);
+     unsigned long     expires;
+     volatile int      active;
+-    volatile int      cancelled;
++    int cancelled; /* accessed through compiler atomics */
+     pthread_t         thread;
+     int               thread_started;
+     pthread_mutex_t   lock;
+@@ -527,8 +527,9 @@
+     void              *context;
+     void             (*complete)(struct urb *);
+     int                interval;
++    unsigned int       timeout_ms; /* gpib-macarm: per-transfer USB timeout */
+     /* internal */
+-    volatile int      cancelled;
++    int cancelled; /* accessed through compiler atomics */
+     pthread_t         thread;
+     int               thread_started;
+     pthread_mutex_t   lock;
+@@ -559,6 +560,21 @@
+     urb->complete = complete;   urb->context = ctx; urb->interval = interval;
+ }
+ 
++
++/* gpib-macarm: preserve transport error identity instead of collapsing to EIO. */
++static inline int kg_usb_errno(int r) {
++    switch (r) {
++    case 0: return 0;
++    case LIBUSB_ERROR_TIMEOUT: return -ETIMEDOUT;
++    case LIBUSB_ERROR_NO_DEVICE: return -ENODEV;
++    case LIBUSB_ERROR_ACCESS: return -EACCES;
++    case LIBUSB_ERROR_BUSY: return -EBUSY;
++    case LIBUSB_ERROR_PIPE: return -EPIPE;
++    case LIBUSB_ERROR_OVERFLOW: return -EOVERFLOW;
++    default: return -EIO;
++    }
++}
++
+ static void *_urb_thread_func(void *arg) {
+     struct urb *urb = (struct urb *)arg;
+     unsigned int pipe_type = urb->pipe & 0xff00u;
+@@ -567,13 +583,13 @@
+     if (pipe_type == _USB_PIPE_INT_IN) {
+         /* Interrupt endpoint: loop until cancelled */
+         ep |= LIBUSB_ENDPOINT_IN;
+-        while (!urb->cancelled) {
++        while (!__atomic_load_n(&urb->cancelled, __ATOMIC_ACQUIRE)) {
+             int actual = 0;
+             int r = libusb_interrupt_transfer(urb->dev->handle, ep,
+                 (unsigned char *)urb->transfer_buffer,
+                 urb->transfer_buffer_length, &actual,
+                 (unsigned int)(urb->interval > 0 ? urb->interval * 10 : 1000));
+-            if (urb->cancelled) break;
++            if (__atomic_load_n(&urb->cancelled, __ATOMIC_ACQUIRE)) break;
+             if (r == LIBUSB_ERROR_TIMEOUT) {
+                 /* Sleep between polls so bulk transfers can acquire the libusb
+                  * event lock without competing at 100 Hz.  Without this sleep,
+@@ -583,9 +599,11 @@
+                 continue;
+             }
+             urb->actual_length = actual;
+-            urb->status = (r == 0) ? 0 : -EIO;
++            urb->status = kg_usb_errno(r);
+             if (urb->complete) urb->complete(urb);
+-            if (urb->cancelled) break;
++            if (r == LIBUSB_ERROR_NO_DEVICE) break;
++            if (r != 0) usleep(40000); /* avoid spinning on repeated errors */
++            if (__atomic_load_n(&urb->cancelled, __ATOMIC_ACQUIRE)) break;
+         }
+     } else {
+         /* Bulk IN or OUT */
+@@ -594,14 +612,14 @@
+         int actual = 0;
+         int r = libusb_bulk_transfer(urb->dev->handle, ep,
+             (unsigned char *)urb->transfer_buffer,
+-            urb->transfer_buffer_length, &actual, 10000);
+-        if (urb->cancelled) {
++            urb->transfer_buffer_length, &actual, urb->timeout_ms);
++        if (__atomic_load_n(&urb->cancelled, __ATOMIC_ACQUIRE)) {
+             urb->status = -ECONNRESET;
+         } else {
+             urb->actual_length = actual;
+-            urb->status = (r == 0) ? 0 : -EIO;
++            urb->status = kg_usb_errno(r);
+         }
+-        if (urb->complete && !urb->cancelled)
++        if (urb->complete && !__atomic_load_n(&urb->cancelled, __ATOMIC_ACQUIRE))
+             urb->complete(urb);
+     }
+     return NULL;
+@@ -610,7 +628,7 @@
+ static inline int usb_submit_urb(struct urb *urb, int flags) {
+     (void)flags;
+     if (!urb || !urb->dev || !urb->dev->handle) return -ENODEV;
+-    urb->cancelled     = 0;
++    __atomic_store_n(&urb->cancelled, 0, __ATOMIC_RELEASE);
+     urb->status        = 0;
+     urb->actual_length = 0;
+ 
+@@ -621,9 +639,9 @@
+          * callback to "resubmit", but our thread already loops — ignore
+          * those resubmit calls to prevent spawning duplicate threads. */
+         if (urb->thread_started) return 0;
++        urb->thread_started = 1; /* before child can resubmit */
+         int r = pthread_create(&urb->thread, NULL, _urb_thread_func, urb);
+-        if (r != 0) return -ENOMEM;
+-        urb->thread_started = 1;
++        if (r != 0) { urb->thread_started = 0; return -ENOMEM; }
+     } else {
+         /* Bulk IN/OUT: run synchronously to avoid pthread_create overhead.
+          * The driver always calls wait_for_completion() immediately after
+@@ -635,10 +653,10 @@
+         int actual = 0;
+         int r = libusb_bulk_transfer(urb->dev->handle, ep,
+             (unsigned char *)urb->transfer_buffer,
+-            urb->transfer_buffer_length, &actual, 10000);
++            urb->transfer_buffer_length, &actual, urb->timeout_ms);
+         urb->actual_length = actual;
+-        urb->status        = (r == 0) ? 0 : -EIO;
+-        if (urb->complete && !urb->cancelled)
++        urb->status        = kg_usb_errno(r);
++        if (urb->complete && !__atomic_load_n(&urb->cancelled, __ATOMIC_ACQUIRE))
+             urb->complete(urb);
+         /* thread_started remains 0 — usb_kill_urb() will be a no-op */
+     }
+@@ -647,7 +665,7 @@
+ 
+ static inline void usb_kill_urb(struct urb *urb) {
+     if (!urb) return;
+-    urb->cancelled = 1;
++    __atomic_store_n(&urb->cancelled, 1, __ATOMIC_RELEASE);
+     if (urb->thread_started) {
+         pthread_join(urb->thread, NULL);
+         urb->thread_started = 0;

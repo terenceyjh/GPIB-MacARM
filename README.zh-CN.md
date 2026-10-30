@@ -2,11 +2,11 @@
 
 [English](README.md) · [开发交接与 prompts](CLAUDE.md)
 
-从 KAME 提取的独立 NI USB-GPIB 用户态驱动，面向 Python 基础 SCPI 数据采集。
+从 [KAME](https://github.com/northriv/KAME) 提取的独立 NI USB-GPIB 用户态驱动，面向 Python 基础 SCPI 数据采集。
 
-Python → 标准库 ctypes → 本包的 C ABI → KAME/linux-gpib C 驱动 → libusb → NI 转接线 → 仪器。
+Python → 标准库 ctypes → 本包的 C ABI → [KAME](https://github.com/northriv/KAME)/[linux-gpib](https://linux-gpib.sourceforge.io/) C 驱动 → libusb → NI 转接线 → 仪器。
 
-不需要 NI-488.2、NI-VISA、Qt、完整 KAME、内核模块或 MCP 服务。Python 接口接近常用 PyVISA 写法，但本包不是 PyVISA 后端，也不承诺完整 VISA API。
+不需要 NI-488.2、NI-VISA、Qt、完整 [KAME](https://github.com/northriv/KAME)、内核模块或 MCP 服务。Python 接口接近常用 PyVISA 写法，但本包不是 PyVISA 后端，也不承诺完整 VISA API。
 
 **验证记录**
 
@@ -36,7 +36,7 @@ python -m gpib_macarm info
 python -m gpib_macarm list
 ```
 
-把这个文件夹完整复制到 Mac 即可，构建不需要原始 KAME 仓库。也可以安装交付的源代码压缩包：
+把这个文件夹完整复制到 Mac 即可，构建不需要原始 [KAME](https://github.com/northriv/KAME) 仓库。也可以安装交付的源代码压缩包：
 
 ```bash
 python -m pip install ./gpib-macarm-0.1.0-source.zip
@@ -141,4 +141,4 @@ macOS 无 NI 驱动占用时一般无需 sudo；如提示 BUSY/ACCESS，检查 N
 
 **来源与许可**
 
-KAME 源码固定于 f451025dc4215c5d85f39b71303f9008ccee66bc。linux-gpib 基础为 KAME 携带的 4.3.6/git 9813ff8f。许可证 GPL-2.0-or-later，原始版权头、COPYING、AUTHORS 均保留；具体见 [THIRD_PARTY.md](THIRD_PARTY.md)。UPSTREAM.json 记录来源及文件哈希，vendor/local-fixes.patch 记录本包的上游文件修复。
+[KAME](https://github.com/northriv/KAME) 源码固定于 f451025dc4215c5d85f39b71303f9008ccee66bc。[linux-gpib](https://linux-gpib.sourceforge.io/) 基础为 [KAME](https://github.com/northriv/KAME) 携带的 4.3.6/git 9813ff8f。许可证 GPL-2.0-or-later，原始版权头、COPYING、AUTHORS 均保留；具体见 [THIRD_PARTY.md](THIRD_PARTY.md)。UPSTREAM.json 记录来源及文件哈希，vendor/local-fixes.patch 记录本包的上游文件修复。

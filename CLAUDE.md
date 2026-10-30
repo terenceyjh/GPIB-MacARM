@@ -35,20 +35,33 @@ vendor/kame/NiGpibDriver.* 作为上游参考保留，不参与本包构建；�
 
 已验证：Windows Python 3.14 的纯 Python 测试；WSL2 Linux x86_64 / Python 3.10.12 / GCC 11.4 的原生编译、加载、wheel/源码 zip 构建与项目内独立安装。Linux 30 项 unittest 全通过，包含 22 项 API、2 项交付/来源完整性、6 项原生解析器/C ABI 测试。ASan/UBSan 覆盖 20,000 个畸形/短回包，以及模拟 URB 的动态超时和错误映射。
 
-2026-10-31 新增实际验证：macOS 14.8.9 / arm64 / Python 3.11.6 / Apple Clang 15.0.0 / Homebrew libusb 1.0.30，editable 编译安装、ctypes 原生加载、模块和 CLI 的 info 成功；30 项 unittest 全通过且无跳过，ASan/UBSan 两个程序通过（含 20,000 个畸形/短回包）。无需修改构建脚本或 vendor，本地日志见 build/validation/。
+### 本次 Mac 离线测试结果（2026-10-31）
+
+- 环境：macOS 14.8.9（23J631）/ arm64 / Python 3.11.6 / Apple Clang 15.0.0 / Homebrew libusb 1.0.30，Python 与 libusb 架构一致。
+- 构建与加载：在项目 `.venv` 中完成 editable 编译安装；ctypes 成功加载 arm64 原生库；`python -m gpib_macarm info` 与 `gpib-macarm info` 均成功，`pip check` 通过。无需修改构建脚本、协议或 vendor。
+- 完整 unittest：30 项通过，0 失败、0 跳过；包括 22 项 Python API、2 项交付/来源完整性和 6 项实际运行的原生解析器/C ABI 测试。
+- ASan/UBSan：`bash tools/test_native.sh` 的两个程序均通过；覆盖 20,000 个畸形/短回包，以及模拟 bulk URB 的 32000 ms 超时传递、USB timeout/no-device 错误映射和完成回调，未报告 sanitizer 错误。
+- 本轮未运行 `list`、仪器查询或 hardware smoke，未打开实际适配器、未发送 REN/IFC。原生测试仅用不存在的设备 index 检查枚举错误路径。这些结果只证明本机编译、加载及离线行为通过。
+- 本地证据：`build/validation/mac-build.log`、`mac-info.log`、`mac-unittest.log`、`mac-sanitizers.log`；完整记录见 [docs/VALIDATION.md](docs/VALIDATION.md)。日志和本机二进制不提交到 Git。
+
+### 尚未验证
 
 尚未验证：Intel Mac、其他 macOS/Python 组合、Mac 非 editable 安装、真实 NI 适配器/仪器、首次冷启动寻址、REN/IFC、终止符、长期采集和拔插/断电恢复。本轮 Mac 只做离线验收，未打开适配器或执行仪器查询。Linux USB 枚举为空，不能把它写成实物通信成功。
 
-本次重命名后已再次完成 Linux 原生构建、30 项测试、sanitizer 检查和新包名的源码 zip/wheel 独立安装；CLI 与导入名也已核对。最终事实以 docs/VALIDATION.md 和实际执行结果为准。
+2026-10-30 重命名后已再次完成 Linux 原生构建、30 项测试、sanitizer 检查和新包名的源码 zip/wheel 独立安装；CLI 与导入名也已核对。最终事实以 docs/VALIDATION.md 和实际执行结果为准。
 
-## Mac 上优先做什么
+## 下一步：实际连接设备做通信测试
 
-1. 检查 macOS、Python、Homebrew、libusb 是否同架构，先完成编译和 `python -m gpib_macarm info`，不要一开始修改协议。
-2. 跑完整离线测试，核对原生测试实际运行而非跳过。必要时执行 tools/test_native.sh。
-3. 插入适配器，仅运行 list，记录 VID/PID、序列号。确认型号和 USB 访问权限。
-4. 连接已知仪器，按 docs/MAC_ACCEPTANCE.md 完成一次身份查询，再跑 100 次连续查询，保存 hardware-smoke.json。
-5. 接入用户实际采集脚本，只迁移通信接口，保持仪器命令和测量流程不变。根据仪器手册设定地址、终止符和超时。
-6. 验证慢查询、完整长回复及超时后恢复，再考虑固定版本和增加 macOS/Linux CI。
+本机 Mac 构建与离线验收已完成。下一步需要实际连接 NI GPIB-USB-HS 转接线和一台已知仪器，验证 USB → GPIB → 仪器的真实通信；在取得实物回包前，不得将项目标记为已通过硬件验收。
+
+1. 先确认用户选择的仪器型号、真实 GPIB 主地址、转接线序列号（可选），并按仪器手册确定查询命令、终止符与超时；不要把示例地址 22 当成实际地址。
+2. 插入适配器并连接仪器，先运行 `python -m gpib_macarm list`，记录 VID/PID、型号和序列号，确认 USB 访问权限。枚举成功只证明发现设备。
+3. 按 [docs/MAC_ACCEPTANCE.md](docs/MAC_ACCEPTANCE.md) 使用真实地址完成一次 `*IDN?` 身份查询；不支持该命令的仪器使用手册规定的只读查询。打开会话会发送 REN/IFC；不发送 `*RST`、不开启输出、不修改量程。
+4. 身份查询成功后，运行 `tools/hardware_smoke.py`，使用同一只读查询做 100 次连续通信测试，保存本地 `hardware-smoke.json`，检查回复非空、身份一致、无超时，并记录环境及时延。
+5. 再验证慢查询、完整长回复、超时及拔插/断电后的恢复；仅将实际完成的项目写入验证记录。硬件报告对外提交前先检查设备信息。
+6. 基础通信稳定后接入用户实际采集脚本，只迁移通信接口，保持仪器命令和测量流程不变，再考虑固定版本和增加 macOS/Linux CI。
+
+在其他 Mac 上复现或修改原生代码后，仍需先检查系统、Python、Homebrew、libusb 架构，重建并运行 `info`、完整离线测试和 `tools/test_native.sh`，确认原生测试实际执行而非跳过。
 
 不要默认刷新 vendor 到 upstream HEAD。不要为修复构建而关闭系统安全机制、安装 NI 内核驱动，或引入新的常驻服务。USB-B 固件加载和初始 PID 761e 的 HS+ 初始化不属于当前包。
 

@@ -4,13 +4,11 @@
 
 [中文说明](README.zh-CN.md) · [Mac acceptance checklist](docs/MAC_ACCEPTANCE.md) · [Development handoff and prompts](CLAUDE.md)
 
-GPIB-MacARM is a standalone, userspace transport for controlling GPIB instruments from Python through an NI GPIB-USB-HS adapter. It extracts the NI USB-GPIB core from **KAME**, whose userspace port is based on **linux-gpib**, and adds a small native C ABI and a VISA-like Python interface.
+GPIB-MacARM is a standalone, userspace transport for controlling GPIB instruments from Python through an NI GPIB-USB-HS adapter. It extracts the NI USB-GPIB core from **[KAME](https://github.com/northriv/KAME)**, whose userspace port is based on **[linux-gpib](https://linux-gpib.sourceforge.io/)**, and adds a small native C ABI and a VISA-like Python interface.
 
-```text
-Python → ctypes → GPIB-MacARM C ABI → KAME/linux-gpib driver → libusb → NI adapter → instrument
-```
+Python → ctypes → GPIB-MacARM C ABI → [KAME](https://github.com/northriv/KAME)/[linux-gpib](https://linux-gpib.sourceforge.io/) driver → libusb → NI adapter → instrument
 
-No NI-488.2, NI-VISA, Qt, complete KAME installation, kernel module, or background server is required. The package name is `gpib-macarm`; the import name is `gpib_macarm`.
+No NI-488.2, NI-VISA, Qt, complete [KAME](https://github.com/northriv/KAME) installation, kernel module, or background server is required. The package name is `gpib-macarm`; the import name is `gpib_macarm`.
 
 ## Status
 
@@ -60,7 +58,7 @@ python -m gpib_macarm info
 python -m gpib_macarm list
 ```
 
-The native library is built locally from the bundled C/C++ sources. It uses GNU C11 and GNU C++17, links libusb/pthread, and is loaded with Python's standard-library `ctypes`. No pybind11 or Python C API binding is needed. Building does not fetch KAME/linux-gpib; pip may fetch its Python build dependencies. The package has **not been published to PyPI**.
+The native library is built locally from the bundled C/C++ sources. It uses GNU C11 and GNU C++17, links libusb/pthread, and is loaded with Python's standard-library `ctypes`. No pybind11 or Python C API binding is needed. Building does not fetch [KAME](https://github.com/northriv/KAME)/[linux-gpib](https://linux-gpib.sourceforge.io/); pip may fetch its Python build dependencies. The package has **not been published to PyPI**.
 
 MacPorts `/opt/local` is also recognized. For another prefix:
 
@@ -166,8 +164,8 @@ On Linux, USB permissions and competing kernel drivers may need attention. On ma
 
 **GPL-2.0-or-later.** See [LICENSE](LICENSE) and [THIRD_PARTY.md](THIRD_PARTY.md). Original copyright and license notices are retained.
 
-- [KAME](https://github.com/northriv/KAME), developed by Kentaro Kitagawa and contributors at the Kitagawa Laboratory, ISSP, University of Tokyo. This project extracts `modules/charinterface/usermode-linux-gpib` from commit [`f451025dc4215c5d85f39b71303f9008ccee66bc`](https://github.com/northriv/KAME/tree/f451025dc4215c5d85f39b71303f9008ccee66bc/modules/charinterface/usermode-linux-gpib). The standalone lifecycle/transport binding derives from KAME's `NiGpibDriver` approach.
-- [linux-gpib](https://linux-gpib.sourceforge.io/), by Frank Mori Hess, C. Schroeter, and contributors. KAME's bundled driver is based on linux-gpib 4.3.6 / git `9813ff8f`.
+- [KAME](https://github.com/northriv/KAME), developed by Kentaro Kitagawa and contributors at the Kitagawa Laboratory, ISSP, University of Tokyo. This project extracts `modules/charinterface/usermode-linux-gpib` from commit [`f451025dc4215c5d85f39b71303f9008ccee66bc`](https://github.com/northriv/KAME/tree/f451025dc4215c5d85f39b71303f9008ccee66bc/modules/charinterface/usermode-linux-gpib). The standalone lifecycle/transport binding derives from [KAME](https://github.com/northriv/KAME)'s `NiGpibDriver` approach.
+- [linux-gpib](https://linux-gpib.sourceforge.io/), by Frank Mori Hess, C. Schroeter, and contributors. [KAME](https://github.com/northriv/KAME)'s bundled driver is based on [linux-gpib](https://linux-gpib.sourceforge.io/) 4.3.6 / git `9813ff8f`.
 - [libusb](https://libusb.info/) is an external library dependency and is not bundled as a binary in this source repository.
 
-[UPSTREAM.json](UPSTREAM.json) records provenance and file hashes; [vendor/local-fixes.patch](vendor/local-fixes.patch) records local changes. GPIB-MacARM is an independent derivative project, not an NI product or an official KAME/linux-gpib release.
+[UPSTREAM.json](UPSTREAM.json) records provenance and file hashes; [vendor/local-fixes.patch](vendor/local-fixes.patch) records local changes. GPIB-MacARM is an independent derivative project, not an NI product or an official [KAME](https://github.com/northriv/KAME)/[linux-gpib](https://linux-gpib.sourceforge.io/) release.

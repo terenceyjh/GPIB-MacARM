@@ -1,6 +1,6 @@
 # Mac 编译与实机验收
 
-2026-10-31 已在 macOS 14.8.9 / arm64 / Python 3.11.6 完成本机 editable 构建、原生加载、30 项离线测试（无跳过）及 sanitizer 检查，详见 [验证记录](VALIDATION.md)。实际 USB-GPIB 转接线和仪器尚未验收。下面保留完整流程：在新环境复现构建后，使用明确选择的仪器继续实物步骤。
+2026-10-31 已在 macOS 14.8.9 / arm64 / Python 3.11.6 完成本机构建、39 项离线测试（无跳过）及原生 sanitizer 检查，并用连接的 GPIB-USB-HS 与地址 24 的 Keithley 2400 通过基础只读通信及铜板四线有限电流扫描，详见 [验证记录](VALIDATION.md)。当前组合保留 EOI，身份查询使用 10000 ms，101 点 NPLC 5 扫描使用 60000 ms（实测约 35.7 秒）。关闭 EOI 和无回复读取超时后的恢复测试未通过；电阻测量准确度、TCR、长期采集和拔插/断电尚未验收。下面保留其他环境及后续项目的完整流程。
 
 1. 解压源码包进入 gpib-macarm。按 README 安装 Xcode Command Line Tools、Python 3.10+、libusb、pkg-config，创建 venv 并 pip install .。
 2. 运行 uname -m、`python -c 'import platform; print(platform.machine())'`、brew --prefix，确认 Python 和 libusb 同架构。Apple Silicon 建议 arm64 加 /opt/homebrew；Intel 使用 x86_64 环境。

@@ -443,7 +443,7 @@ int ni_usb_parse_termination_block(const uint8_t *buffer)
 int parse_board_ibrd_readback(const uint8_t *raw, int raw_length,
     struct ni_usb_status_block *status, uint8_t *data, int capacity, int *actual)
 {
-    int i=0, total=0, copied=0, last_block=0, blocks=0, k;
+    int i=0, total=0, copied=0, last_block=0, blocks=0, k, compact;
     struct ni_usb_status_block reg;
     if (!raw || !status || !data || !actual || raw_length < 0 || capacity < 0)
         return -EPROTO;
@@ -457,20 +457,34 @@ int parse_board_ibrd_readback(const uint8_t *raw, int raw_length,
         }
         i+=length; total+=length; last_block=length; ++blocks;
     }
-    /* status(8), ADR1/last/padding(4), register status(8), count/pad(4), TERM(4) */
-    if (raw_length-i != 28) return -EPROTO;
+    /* HS hardware can omit the register-write acknowledgement: accept only
+     * status(8), ADR1/last/padding(4), optional register status/count(12), TERM(4). */
+    if (raw_length-i != 16 && raw_length-i != 28) return -EPROTO;
+    compact = raw_length-i == 16;
     ni_usb_parse_status_block(raw+i,status); i+=8;
     if (status->id != NIUSB_IBRD_STATUS_ID) return -EPROTO;
     ++i; /* ADR1 */
     k=raw[i++];
-    if ((!blocks && k != 0) || (blocks && k > last_block)) return -EPROTO;
-    *actual=blocks ? total-last_block+k : 0;
+    /* Observed HS compact replies have an unreliable final-block count on
+     * small reads. Derive their size from the requested capacity minus the
+     * IBRD residual; require it to fit precisely within the final data block. */
+    if (compact) {
+        if (status->count > capacity) return -EPROTO;
+        *actual=capacity-status->count;
+        if ((!blocks && *actual != 0) ||
+            (blocks && (*actual <= total-last_block || *actual > total))) return -EPROTO;
+    } else {
+        if ((!blocks && k != 0) || (blocks && k > last_block)) return -EPROTO;
+        *actual=blocks ? total-last_block+k : 0;
+    }
     if (*actual > capacity || *actual > copied) return -EPROTO;
     if (raw[i++] || raw[i++]) return -EPROTO;
-    ni_usb_parse_status_block(raw+i,&reg); i+=8;
-    if (reg.id != NIUSB_REG_WRITE_ID || reg.error_code != NIUSB_NO_ERROR) return -EPROTO;
-    if (raw[i++] != 2) return -EPROTO;
-    for (k=0;k<3;++k) if (raw[i++]) return -EPROTO;
+    if (raw_length-i == 16) {
+        ni_usb_parse_status_block(raw+i,&reg); i+=8;
+        if (reg.id != NIUSB_REG_WRITE_ID || reg.error_code != NIUSB_NO_ERROR) return -EPROTO;
+        if (raw[i++] != 2) return -EPROTO;
+        for (k=0;k<3;++k) if (raw[i++]) return -EPROTO;
+    }
     if (raw[i++] != NIUSB_TERM_ID) return -EPROTO;
     for (k=0;k<3;++k) if (raw[i++]) return -EPROTO;
     return i;

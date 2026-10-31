@@ -33,17 +33,13 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 ```
 
-**From a release:** download and extract the source ZIP, enter its `GPIB-MacARM` folder, then install with pip:
-
-```bash
-python -m pip install .
-```
-
-Alternatively, install the downloaded source distribution directly, from the folder containing it:
+**From a release:** download **`gpib-macarm-0.1.0-release.zip`**, extract it and enter `GPIB-MacARM-0.1.0`. The folder contains the installer archive, dedicated English/Chinese READMEs and **`CLAUDE.md`, which you can give directly to your agent**. Follow that folder's README, or install its adjacent archive:
 
 ```bash
 python -m pip install ./gpib_macarm-0.1.0.tar.gz
 ```
+
+No need to extract the inner tar.gz. The outer installation folder is not a source checkout; use the command above rather than `pip install .` there.
 
 **From this repository:**
 

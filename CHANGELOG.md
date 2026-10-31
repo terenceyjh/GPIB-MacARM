@@ -1,5 +1,10 @@
 # Changelog
 
+## Packaging update — 2026-11-01
+
+- Deliver one installation ZIP containing the validated 0.1.0 source archive, dedicated English/Chinese installation READMEs, a detailed agent troubleshooting guide, licenses and internal checksums.
+- Keep the existing driver source archive and release tag; replace the standalone download assets with the installation bundle.
+
 ## 0.1.0 — release preparation, 2026-11-01
 
 - Package a standalone userspace GPIB driver and Python/CLI interface for Apple Silicon Macs, derived from KAME / linux-gpib.

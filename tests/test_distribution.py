@@ -21,7 +21,8 @@ class DistributionTests(unittest.TestCase):
     def test_portable_build_inputs_and_documentation_exist(self):
         for name in ("LICENSE", "THIRD_PARTY.md", "UPSTREAM.json", "pyproject.toml", "setup.py", "CLAUDE.md", "README.zh-CN.md",
                      "vendor/local-fixes.patch", "native/driver.cpp", "src/gpib_macarm/api.py",
-                     "docs/ARCHITECTURE.md", "docs/VALIDATION.md", "tools/make_delivery.py"):
+                     "docs/ARCHITECTURE.md", "docs/VALIDATION.md", "tools/make_delivery.py",
+                     "release/README.md", "release/README.zh-CN.md", "release/CLAUDE.md"):
             with self.subTest(file=name):
                 self.assertTrue((ROOT / name).is_file())
 
@@ -48,6 +49,37 @@ class DistributionTests(unittest.TestCase):
             delivery.build_source_zip(output, root)
             with zipfile.ZipFile(output) as archive:
                 self.assertEqual(set(archive.namelist()), {"GPIB-MacARM/" + p for p in public})
+
+    def test_install_bundle_keeps_archive_and_guides_together_with_valid_checksums(self):
+        spec = importlib.util.spec_from_file_location("make_delivery", ROOT / "tools/make_delivery.py")
+        delivery = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(delivery)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "release").mkdir()
+            (root / "pyproject.toml").write_text('version = "0.1.0"\n')
+            for name in ["README.md", "README.zh-CN.md", "CLAUDE.md"]:
+                (root / "release" / name).write_text("release-specific " + name)
+                (root / name).write_text("repository guide; do not bundle this copy")
+            for name in ["LICENSE", "THIRD_PARTY.md", "AGENTS.md", "private.log"]:
+                (root / name).write_text(name)
+            sdist = root / "gpib_macarm-0.1.0.tar.gz"
+            sdist.write_bytes(b"unchanged installer fixture")
+            output = root / "dist/release.zip"
+            delivery.build_release_zip(output, sdist, root)
+            with zipfile.ZipFile(output) as archive:
+                contents = {n.removeprefix("GPIB-MacARM-0.1.0/"): archive.read(n)
+                            for n in archive.namelist()}
+            self.assertEqual(set(contents), {"README.md", "README.zh-CN.md", "CLAUDE.md",
+                                           "LICENSE", "THIRD_PARTY.md", sdist.name, "SHA256SUMS.txt"})
+            self.assertEqual(contents[sdist.name], sdist.read_bytes())
+            self.assertEqual(contents["CLAUDE.md"], b"release-specific CLAUDE.md")
+            checked = set()
+            for line in contents["SHA256SUMS.txt"].decode().splitlines():
+                digest, name = line.split("  ", 1)
+                self.assertEqual(hashlib.sha256(contents[name]).hexdigest(), digest)
+                checked.add(name)
+            self.assertEqual(checked, set(contents) - {"SHA256SUMS.txt"})
 
 
 if __name__ == "__main__":

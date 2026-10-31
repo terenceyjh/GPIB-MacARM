@@ -1,4 +1,5 @@
-"""Build a curated SOURCE zip; private working-directory files are never swept in."""
+"""Bundle a pip-installable sdist with end-user guides; never sweep in private files."""
+import argparse
 import hashlib
 from pathlib import Path
 import re
@@ -11,6 +12,7 @@ PUBLIC_ROOT_FILES = {
     "pyproject.toml", "setup.py", "MANIFEST.in",
 }
 PUBLIC_DOCS = {"docs/ARCHITECTURE.md", "docs/VALIDATION.md"}
+RELEASE_GUIDES = {"release/README.md", "release/README.zh-CN.md", "release/CLAUDE.md"}
 PUBLIC_TOOLS = {
     "tools/hardware_smoke.py", "tools/keithley_2400_iv.py",
     "tools/sr830_recovery_check.py", "tools/make_delivery.py",
@@ -30,7 +32,7 @@ def public_source_files(root=ROOT):
     """Return only documented public inputs, ignoring unknown files and symlinks."""
     root = Path(root)
     result = set()
-    for name in PUBLIC_ROOT_FILES | PUBLIC_DOCS | PUBLIC_TOOLS:
+    for name in PUBLIC_ROOT_FILES | PUBLIC_DOCS | PUBLIC_TOOLS | RELEASE_GUIDES:
         p = root / name
         if p.is_file() and not p.is_symlink():
             result.add(p)
@@ -56,18 +58,51 @@ def build_source_zip(output, root=ROOT):
     return len(files)
 
 
+def project_version(root=ROOT):
+    return re.search(r'^version = "([^"]+)"',
+                     (Path(root) / "pyproject.toml").read_text(), re.MULTILINE).group(1)
+
+
+def build_release_zip(output, sdist, root=ROOT):
+    """Put the unchanged sdist and dedicated guides together in one folder."""
+    root, output, sdist = Path(root), Path(output), Path(sdist)
+    version = project_version(root)
+    if sdist.name != f"gpib_macarm-{version}.tar.gz":
+        raise ValueError("The source archive filename must match the project version")
+    inputs = {"README.md": root / "release/README.md",
+              "README.zh-CN.md": root / "release/README.zh-CN.md",
+              "CLAUDE.md": root / "release/CLAUDE.md",
+              "LICENSE": root / "LICENSE", "THIRD_PARTY.md": root / "THIRD_PARTY.md",
+              sdist.name: sdist}
+    contents = {}
+    for name, path in inputs.items():
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"Missing or unsafe release input: {path}")
+        contents[name] = path.read_bytes()
+    contents["SHA256SUMS.txt"] = "".join(
+        hashlib.sha256(data).hexdigest() + "  " + name + "\n"
+        for name, data in sorted(contents.items())).encode("utf-8")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, data in sorted(contents.items()):
+            archive.writestr(f"GPIB-MacARM-{version}/{name}", data)
+    return len(contents)
+
+
 def main():
-    version = re.search(r'^version = "([^"]+)"',
-                        (ROOT / "pyproject.toml").read_text(), re.MULTILINE).group(1)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", action="store_true", help="Build a developer source ZIP instead")
+    args = parser.parse_args()
+    version = project_version()
     dest = ROOT / "dist"
-    output = dest / f"gpib-macarm-{version}-source.zip"
-    count = build_source_zip(output)
-    archives = sorted([*dest.glob(f"gpib-macarm-{version}-source.zip"),
-                       *dest.glob(f"gpib_macarm-{version}.tar.gz")])
-    (dest / "SHA256SUMS.txt").write_text("".join(
-        hashlib.sha256(p.read_bytes()).hexdigest() + "  " + p.name + "\n"
-        for p in archives), encoding="ascii")
-    print(f"{output}: {count} source files, {output.stat().st_size} bytes")
+    if args.source:
+        output = dest / f"gpib-macarm-{version}-source.zip"
+        count = build_source_zip(output)
+    else:
+        output = dest / f"gpib-macarm-{version}-release.zip"
+        count = build_release_zip(output, dest / f"gpib_macarm-{version}.tar.gz")
+    print(f"{output}: {count} files, {output.stat().st_size} bytes, "
+          f"SHA256 {hashlib.sha256(output.read_bytes()).hexdigest()}")
 
 
 if __name__ == "__main__":

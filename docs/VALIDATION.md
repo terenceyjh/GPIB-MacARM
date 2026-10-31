@@ -26,6 +26,10 @@ Tested environment: macOS 14.8.9 / arm64, libusb 1.0.30; Python 3.11.6 for 2400 
 
 2026-11-01 打包验证：**57 项离线测试通过、零跳过**。ZIP 与 tar.gz 分别在新的 arm64 Python 3.11.6 / 3.13.9 环境完成 pip 安装，原生库加载、pip check 及全套测试通过；检查确认不夹带本机记录和二进制产物。上一轮原生 sanitizer 检查通过，本轮未重跑仪器测试。Linux/Windows 的历史结果不代表当前版本已完成这些平台的实物验收。
 
+Installation-bundle update: 58 project offline checks passed. The ZIP pairs the same validated 0.1.0 sdist with dedicated install/agent guides and internal checksums; it introduces no driver changes.
+
+安装 ZIP 调整：58 项项目离线检查通过；内含原已验证的 0.1.0 源码包、专用说明和校验文件，不改变驱动代码。
+
 ## Remaining work / 待办
 
 No-EOI writes and final-chunk EOI handling; broader fault recovery; binary/longer/multi-instrument acquisition; cross-machine installation and macOS CI. See [README](../README.md) / [中文说明](../README.zh-CN.md) and [CLAUDE.md](../CLAUDE.md).

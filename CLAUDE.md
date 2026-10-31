@@ -1,6 +1,6 @@
 # GPIB-MacARM: agent guide / Agent 使用指南
 
-This is the **public, portable guide** shipped with the repository and release. Read [README.md](README.md) / [README.zh-CN.md](README.zh-CN.md), [test summary](docs/VALIDATION.md) and [architecture](docs/ARCHITECTURE.md) before changing the project. No private machine setup or credentials are needed.
+This is the **public, portable guide** shipped with the repository and release. Read [README.md](README.md) / [README.zh-CN.md](README.zh-CN.md), [test summary](docs/VALIDATION.md) and [architecture](docs/ARCHITECTURE.md) before changing the project. The installation ZIP has its own end-user guide in `release/CLAUDE.md`, copied beside its installer archive. No private machine setup or credentials are needed.
 
 本文件随仓库与 release 提供，可直接交给 agent。修改前先读中英文 README、测试概览和架构文档；这里不依赖开发者的本机环境或认证信息。
 
@@ -99,6 +99,6 @@ Keep C ABI signatures and ctypes declarations aligned; no C++ exceptions may cro
 
 ## Public vs local files / 公开与本地文件
 
-Ship portable source, licenses, concise docs and this guide. Do not publish local agent handoffs, authentication material, environments, build outputs, serial numbers, hardware reports or measurement data. Keep detailed development/test evidence in ignored local storage. Use `tools/make_delivery.py` for the curated source ZIP; inspect both ZIP and sdist contents before distribution. Publishing to a service is separate from building local release files.
+Ship portable source, licenses, concise docs and this guide. Do not publish local agent handoffs, authentication material, environments, build outputs, serial numbers, hardware reports or measurement data. Keep detailed development/test evidence in ignored local storage. Use `tools/make_delivery.py` to bundle an existing `dist/gpib_macarm-0.1.0.tar.gz` with the guides in `release/`. The result is one installation ZIP; publish that ZIP rather than a standalone tar.gz. `--source` builds an optional developer source ZIP. Inspect outer ZIP and inner sdist contents before distribution. Publishing to a service is separate from building local release files.
 
 公开版本保留通用使用说明和简要测试概览；本机 agent 交接、认证材料、详细测试记录及测量数据不进入仓库或 release。打包后检查实际文件清单。

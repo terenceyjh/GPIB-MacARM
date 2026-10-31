@@ -16,6 +16,7 @@
 extern "C" {
 #include "compat.h"
 #include "gpibP.h"
+#include "ni_usb_gpib.h"
 extern int ni_module_init(void);
 extern void ni_module_exit(void);
 extern struct usb_driver *g_ni_usb_driver;
@@ -123,9 +124,7 @@ class Controller {
         check(board.interface->command(&board, b, n, &written), "GPIB command");
         if (written != n) throw Error(PROTOCOL, "Short GPIB command transfer.");
     }
-    void unaddress() noexcept {
-        try { cmd({UNL, UNT}); } catch (...) {}
-    }
+    void unaddress() { cmd({UNL, UNT}); }
     void drain(libusb_device *d) {
         libusb_config_descriptor *cfg = nullptr;
         if (libusb_get_active_config_descriptor(d, &cfg) != 0) return;
@@ -212,6 +211,37 @@ public:
         } catch (...) { cleanup(); throw; }
     }
     ~Controller() { cleanup(); }
+    void recover(unsigned wait_ms) {
+        if (!wait_ms || wait_ms > 60000)
+            throw Error(INVALID,"Recovery wait must be 1..60000 milliseconds.");
+        auto *p=static_cast<ni_usb_private_t *>(board.private_data);
+        if (!p) throw Error(CLOSED,"Adapter is not attached.");
+        usb_kill_urb(p->interrupt_urb);
+        unsigned char status[8]{};
+        int r=libusb_control_transfer(usb.handle,
+            LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
+            NI_USB_STOP_REQUEST,0,0,status,sizeof(status),1000);
+        usb_check(r,"Stop pending adapter operation");
+        if (r != sizeof(status) || status[0] != NI_USB_STOP_REQUEST)
+            throw Error(PROTOCOL,"Invalid adapter STOP acknowledgement.");
+        // Firmware can complete many seconds AFTER the host read timed out.
+        // A short empty drain is not evidence that the old operation finished.
+        std::vector<unsigned char> stale(70016);
+        bool empty=false;
+        for (int i=0;i<16;++i) {
+            int got=0;
+            r=libusb_bulk_transfer(usb.handle,p->bulk_in_endpoint | LIBUSB_ENDPOINT_IN,
+                stale.data(),static_cast<int>(stale.size()),&got,i == 0 ? wait_ms : 200);
+            if (r == LIBUSB_ERROR_TIMEOUT && got == 0) { empty=true; break; }
+            usb_check(r,"Drain late adapter completion");
+            if (got == 0) { empty=true; break; }
+        }
+        if (!empty) throw Error(PROTOCOL,"Adapter completion queue did not become empty.");
+        check(kg_ni_ifc(&board),"Recovery interface clear (IFC)");
+        cmd({SPD,UNL,UNT});
+        board.interface->disable_eos(&board);
+        check(usb_submit_urb(p->interrupt_urb,GFP_KERNEL),"Restart adapter status polling");
+    }
     void timeout(unsigned us) {
         if (!us || us > 1000000000U) throw Error(INVALID,"Timeout must be 1..1000000000 microseconds.");
         board.usec_timeout=us;
@@ -220,12 +250,11 @@ public:
         address(addr,pad);
         if (!size || size>65535) throw Error(INVALID,"One native write must contain 1..65535 bytes.");
         size_t written=0;
-        try {
-            cmd({MTA(static_cast<uint32_t>(pad)),UNL,MLA(static_cast<uint32_t>(addr))});
-            int r=board.interface->write(&board,const_cast<uint8_t *>(data),size,eoi,&written);
-            unaddress(); check(r,"GPIB write (not automatically retried)");
-        } catch (...) { unaddress(); throw; }
+        cmd({MTA(static_cast<uint32_t>(pad)),UNL,MLA(static_cast<uint32_t>(addr))});
+        int r=board.interface->write(&board,const_cast<uint8_t *>(data),size,eoi,&written);
+        check(r,"GPIB write (not automatically retried)");
         if (written != size) throw Error(PROTOCOL,"Short GPIB write; command may have partially executed.");
+        unaddress();
         return written;
     }
     size_t read(int addr,uint8_t *data,size_t size,int eos,int *end) {
@@ -237,26 +266,25 @@ public:
             if (eos>=0) check(board.interface->enable_eos(&board,static_cast<uint8_t>(eos),1),"Enable EOS");
             cmd({UNL,MLA(static_cast<uint32_t>(pad)),MTA(static_cast<uint32_t>(addr))});
             int r=board.interface->read(&board,data,size,end,&count);
-            board.interface->disable_eos(&board); unaddress(); check(r,"GPIB read");
-        } catch (...) { board.interface->disable_eos(&board); unaddress(); throw; }
+            board.interface->disable_eos(&board); check(r,"GPIB read");
+        } catch (...) { board.interface->disable_eos(&board); throw; }
         if (count>size) throw Error(PROTOCOL,"Driver returned an invalid byte count.");
+        unaddress();
         return count;
     }
     void clear(int addr) {
         address(addr,pad);
-        try { cmd({UNL,MLA(static_cast<uint32_t>(addr)),SDC}); unaddress(); }
-        catch (...) { unaddress(); throw; }
+        cmd({UNL,MLA(static_cast<uint32_t>(addr)),SDC}); unaddress();
     }
     void ifc() { check(kg_ni_ifc(&board),"Interface clear (IFC)"); }
     void remote(bool enabled) { check(kg_ni_remote(&board,enabled),"Set remote (REN)"); }
     uint8_t poll(int addr) {
         address(addr,pad); uint8_t b=0; size_t n=0; int end=0;
-        try {
-            cmd({UNL,MLA(static_cast<uint32_t>(pad)),SPE}); cmd({MTA(static_cast<uint32_t>(addr))});
-            int r=board.interface->read(&board,&b,1,&end,&n);
-            cmd({SPD,UNL,UNT}); check(r,"Serial poll");
-        } catch (...) { try {cmd({SPD,UNL,UNT});} catch (...) {} throw; }
+        cmd({UNL,MLA(static_cast<uint32_t>(pad)),SPE}); cmd({MTA(static_cast<uint32_t>(addr))});
+        int r=board.interface->read(&board,&b,1,&end,&n);
+        check(r,"Serial poll");
         if (n!=1) throw Error(PROTOCOL,"Serial poll returned no status byte.");
+        cmd({SPD,UNL,UNT});
         return b;
     }
     bool srq() {
@@ -300,6 +328,7 @@ KG_EXPORT int kg_read(void *p,int addr,uint8_t *data,size_t size,int eos,size_t 
 }
 KG_EXPORT int kg_clear(void *p,int addr) { return handle_device(p,[&](auto &d){d.clear(addr);}); }
 KG_EXPORT int kg_ifc(void *p) { return handle_device(p,[](auto &d){d.ifc();}); }
+KG_EXPORT int kg_recover(void *p,unsigned wait_ms) { return handle_device(p,[&](auto &d){d.recover(wait_ms);}); }
 KG_EXPORT int kg_remote(void *p,int on) { return handle_device(p,[&](auto &d){d.remote(on!=0);}); }
 KG_EXPORT int kg_poll(void *p,int addr,int *stb) { return handle_device(p,[&](auto &d){if(!stb) throw Error(INVALID,"Null output."); *stb=d.poll(addr);}); }
 KG_EXPORT int kg_srq(void *p,int *srq) { return handle_device(p,[&](auto &d){if(!srq) throw Error(INVALID,"Null output."); *srq=d.srq();}); }

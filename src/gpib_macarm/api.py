@@ -14,7 +14,8 @@ import time
 import weakref
 
 from ._backend import NativeBackend
-from .errors import ClosedError, MessageTooLongError, ProtocolError
+from .errors import (ClosedError, GpibError, MessageTooLongError, ProtocolError,
+                     SessionFaultedError)
 
 
 def _integer(value, name, minimum, maximum):
@@ -92,6 +93,10 @@ class Controller:
         self.serial, self.timeout = serial, timeout
         timeout_us = _timeout(timeout)
         self._lock = threading.RLock()
+        self._fault = None
+        self._addresses = set()
+        self._pending_reads = set()
+        self._identities = {}
         self._backend = _backend if _backend is not None else NativeBackend()
         self._handle = self._backend.open(self.index, self.board_pad, timeout_us, serial)
         self._finalizer = weakref.finalize(self, self._backend.close, self._handle)
@@ -100,24 +105,142 @@ class Controller:
     def closed(self):
         return self._handle is None
 
+    @property
+    def faulted(self):
+        return self._fault is not None
+
+    def _check_fault(self):
+        if self._fault is not None:
+            raise SessionFaultedError(
+                "Earlier adapter I/O failed; stop acquisition and call recover() explicitly. "
+                "No command was sent. Original error: " + str(self._fault)) from self._fault
+
     @contextmanager
     def transaction(self, *, timeout=None):
         """Hold the adapter lock across multiple operations on its resources."""
         with self._lock:
             if self.closed:
                 raise ClosedError("Controller is closed")
-            self._backend.timeout(self._handle, _timeout(self.timeout if timeout is None else timeout))
-            yield
+            self._check_fault()
+            try:
+                self._backend.timeout(self._handle, _timeout(self.timeout if timeout is None else timeout))
+                yield
+            except (ClosedError, SessionFaultedError):
+                raise
+            except (GpibError, KeyboardInterrupt) as exc:
+                if self._fault is None:
+                    self._fault = exc
+                raise
 
     def open_instrument(self, address, **settings):
-        if self.closed:
-            raise ClosedError("Controller is closed")
-        _settings(settings)
-        return Instrument(self, address, **settings)
+        with self._lock:
+            if self.closed:
+                raise ClosedError("Controller is closed")
+            self._check_fault()
+            _settings(settings)
+            return Instrument(self, address, **settings)
+
+    def recover(self, timeout=20000, mav_mask=0x10):
+        """Wait for cancelled/late adapter completions, IFC, then known-address SDC.
+
+        Discards pending replies and can affect instrument operations through
+        device clear. Does not replay arbitrary failed commands or confirm output off.
+        Previously cached identities get at most two read-only *IDN? checks. Recheck
+        identity/settings before starting a NEW acquisition; failed data stays
+        failed. Recovery failure keeps the shared controller faulted.
+
+        timeout (ms) bounds the first late-completion receive, not the whole
+        cleanup. Default MAV bit 4 assumes IEEE-488.2 status; override the mask
+        for another instrument, or use 0 only when its queue-clear behavior is
+        independently known. Discard is limited to 16 messages / 1 MiB per address.
+        """
+        _integer(timeout, 'recovery timeout', 1, 60000)
+        _integer(mav_mask, 'MAV mask', 0, 255)
+        with self._lock:
+            if self.closed:
+                raise ClosedError("Controller is closed")
+            try:
+                discarded = {address: 0 for address in self._addresses}
+                # A successful count-limited read can leave a known reply in
+                # progress. Finish it BEFORE IFC/SDC, which may otherwise leave
+                # the talker's prefetched byte invisible to its MAV status.
+                if self._fault is None:
+                    for address in sorted(self._pending_reads):
+                        while True:
+                            data, end = self._backend.read(self._handle, address, 4096, -1)
+                            discarded[address] += len(data)
+                            if discarded[address] > 1024*1024:
+                                raise MessageTooLongError('Pending recovery reply exceeded 1 MiB')
+                            if not data and not end:
+                                raise ProtocolError('Pending recovery reply made no progress')
+                            if end:
+                                break
+                self._backend.recover(self._handle, timeout)
+                self._backend.timeout(self._handle, _timeout(self.timeout))
+                for address in sorted(self._addresses):
+                    self._backend.clear(self._handle, address)
+                    if not mav_mask:
+                        continue
+                    for message in range(17):
+                        if not self._backend.poll(self._handle, address) & mav_mask:
+                            break
+                        if message == 16:
+                            raise ProtocolError('Instrument MAV remained set after 16 discarded messages')
+                        # Read only when IEEE-488.2 MAV reports queued data.
+                        # SR830 SDC does not discard a partially read reply.
+                        while True:
+                            data, end = self._backend.read(self._handle, address, 4096, -1)
+                            discarded[address] += len(data)
+                            if discarded[address] > 1024*1024:
+                                raise MessageTooLongError('Recovery discard exceeded 1 MiB')
+                            if not data and not end:
+                                raise ProtocolError('Recovery read made no progress despite MAV')
+                            if end:
+                                break
+                identity_attempts = {}
+                for address, known in sorted(self._identities.items()):
+                    expected, write_term, read_term, encoding = known
+                    for attempt in range(2):
+                        payload = ('*IDN?' + (write_term or '')).encode(encoding)
+                        if self._backend.write(self._handle, address, payload, True) != len(payload):
+                            raise ProtocolError('Short identity verification write during recovery')
+                        pieces = []
+                        size = 0
+                        eos = read_term.encode('ascii')[-1] if read_term else -1
+                        while True:
+                            data, end = self._backend.read(self._handle, address, 4096, eos)
+                            pieces.append(data)
+                            size += len(data)
+                            if size > 65536 or (not data and not end):
+                                raise ProtocolError('Invalid recovery identity response')
+                            if end:
+                                break
+                        reply = b''.join(pieces).decode(encoding)
+                        if read_term and reply.endswith(read_term):
+                            reply = reply[:-len(read_term)]
+                        identity_attempts[address] = attempt + 1
+                        if reply == expected:
+                            break
+                        discarded[address] += size
+                        if discarded[address] > 1024*1024:
+                            raise MessageTooLongError('Recovery discard exceeded 1 MiB')
+                    else:
+                        raise ProtocolError('Recovery identity does not match the known instrument')
+            except BaseException as exc:
+                if self._fault is None:
+                    self._fault = exc
+                raise
+            self._fault = None
+            self._pending_reads.clear()
+            self.last_recovery = {'discarded_bytes': discarded, 'mav_mask': mav_mask,
+                                  'first_completion_wait_ms': timeout,
+                                  'identity_attempts': identity_attempts}
 
     def interface_clear(self):
         """Pulse IFC for the entire bus; does not reset instrument settings via *RST."""
         with self.transaction():
+            if self._pending_reads:
+                raise ValueError('Finish the pending reply or call recover() before interface clear')
             self._backend.interface_clear(self._handle)
 
     def enable_remote(self, enabled=True):
@@ -164,6 +287,8 @@ class Instrument:
         self.chunk_size, self.max_read_bytes, self.send_end = chunk_size, max_read_bytes, send_end
         self._closed = False
         self.resource_name = f"GPIB{controller.index}::{self.address}::INSTR"
+        with controller._lock:
+            controller._addresses.add(self.address)
 
     @property
     def closed(self):
@@ -178,6 +303,8 @@ class Instrument:
             yield
 
     def _write(self, payload):
+        if self.controller._pending_reads:
+            raise ValueError('An earlier reply is not fully read; finish it or call recover() before writing. No command was sent.')
         if not isinstance(payload, (bytes, bytearray, memoryview)):
             raise TypeError("write_raw expects bytes-like data")
         payload = bytes(payload)
@@ -218,6 +345,10 @@ class Instrument:
         while total < limit:
             data, end = self.controller._backend.read(self.controller._handle, self.address,
                                                       min(chunk_size, limit - total), eos)
+            if end:
+                self.controller._pending_reads.discard(self.address)
+            else:
+                self.controller._pending_reads.add(self.address)
             if not data and not end:
                 raise ProtocolError("Read returned zero bytes without END; clear or reopen the session")
             pieces.append(data); total += len(data)
@@ -239,6 +370,10 @@ class Instrument:
             while total < count:
                 data, end = self.controller._backend.read(self.controller._handle, self.address,
                                                           min(chunk_size, count-total), eos)
+                if end:
+                    self.controller._pending_reads.discard(self.address)
+                else:
+                    self.controller._pending_reads.add(self.address)
                 if not data and not end:
                     raise ProtocolError("Read returned zero bytes without END")
                 parts.append(data); total += len(data)
@@ -262,7 +397,11 @@ class Instrument:
             self.write(message)
             if wait:
                 time.sleep(wait)
-            return self.read()
+            reply = self.read()
+            if message.strip().upper() == '*IDN?' and reply:
+                self.controller._identities.setdefault(self.address,
+                    (reply, self.write_termination, self.read_termination, self.encoding))
+            return reply
 
     def query_ascii_values(self, message, converter=float, separator=","):
         result = self.query(message)
@@ -270,6 +409,8 @@ class Instrument:
 
     def read_stb(self):
         with self._operation():
+            if self.controller._pending_reads:
+                raise ValueError('Finish the pending reply or call recover() before serial polling')
             return self.controller._backend.poll(self.controller._handle, self.address)
 
     @property
@@ -279,7 +420,16 @@ class Instrument:
     def clear(self):
         """Selected device clear (SDC); not SCPI *CLS or *RST."""
         with self._operation():
+            if self.controller._pending_reads:
+                raise ValueError('Finish the pending reply or call recover() instead of clearing it mid-message')
             self.controller._backend.clear(self.controller._handle, self.address)
+
+    def recover(self, timeout=20000, mav_mask=0x10):
+        """Recover the shared adapter and clear all its known instrument queues."""
+        with self.controller._lock:
+            if self.closed:
+                raise ClosedError("Instrument resource is closed")
+            self.controller.recover(timeout, mav_mask)
 
     def close(self):
         with self.controller._lock:

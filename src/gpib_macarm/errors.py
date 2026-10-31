@@ -25,5 +25,9 @@ class ClosedError(GpibError):
     pass
 
 
+class SessionFaultedError(GpibError):
+    """Earlier I/O failed; explicit recovery is required before ordinary I/O."""
+
+
 class MessageTooLongError(ProtocolError):
     """The receive limit was reached before END/EOS. The bus may need clear()."""

@@ -1,11 +1,15 @@
-include LICENSE THIRD_PARTY.md UPSTREAM.json README.md README.zh-CN.md CLAUDE.md CHANGELOG.md .gitattributes
+include LICENSE THIRD_PARTY.md UPSTREAM.json README.md README.zh-CN.md CLAUDE.md CHANGELOG.md .gitattributes .gitignore
+include docs/ARCHITECTURE.md docs/VALIDATION.md
+include tools/make_delivery.py tools/hardware_smoke.py tools/keithley_2400_iv.py tools/sr830_recovery_check.py tools/test_native.sh tools/vendor_patch.py
 recursive-include native *.cpp *.h
 recursive-include vendor *.c *.cpp *.h README AUTHORS COPYING *.patch
-recursive-include docs *.md
 recursive-include examples *.py
 recursive-include tests *.py *.c
-recursive-include tools *.py *.sh
-global-exclude *.so *.dylib *.dll *.pyd *.o *.pyc
+exclude AGENTS.md LOCAL_INSTALL.md GPIB_开发测试记录.md docs/MAC_ACCEPTANCE.md
+global-exclude *.so *.dylib *.dll *.pyd *.o *.pyc *.log .DS_Store
+prune local-notes
 prune build
 prune dist
 prune artifacts
+prune .venv
+prune .git

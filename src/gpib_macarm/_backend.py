@@ -30,6 +30,7 @@ class NativeBackend:
         self._declare("kg_read", [ptr, integer, ptr, size, integer, ct.POINTER(size), ct.POINTER(integer)])
         self._declare("kg_clear", [ptr, integer])
         self._declare("kg_ifc", [ptr])
+        self._declare("kg_recover", [ptr, uint])
         self._declare("kg_remote", [ptr, integer])
         self._declare("kg_poll", [ptr, integer, ct.POINTER(integer)])
         self._declare("kg_srq", [ptr, ct.POINTER(integer)])
@@ -37,7 +38,11 @@ class NativeBackend:
             raise GpibError("Native/Python driver versions do not match. Rebuild and reinstall.")
 
     def _declare(self, name, args, result=ct.c_int):
-        fn = getattr(self.lib, name)
+        try:
+            fn = getattr(self.lib, name)
+        except AttributeError as exc:
+            raise GpibError("Native driver is older than the Python API. Rebuild with "
+                            "python -m pip install --no-cache-dir --force-reinstall --no-deps -e .") from exc
         fn.argtypes, fn.restype = args, result
 
     def _check(self, code):
@@ -87,6 +92,9 @@ class NativeBackend:
 
     def interface_clear(self, handle):
         self._check(self.lib.kg_ifc(handle))
+
+    def recover(self, handle, timeout_ms=20000):
+        self._check(self.lib.kg_recover(handle, timeout_ms))
 
     def remote(self, handle, enabled):
         self._check(self.lib.kg_remote(handle, enabled))

@@ -107,6 +107,10 @@ class NativeTests(unittest.TestCase):
         with self.assertRaises(ClosedError):
             self.backend.timeout(None,3000000)
 
+    def test_null_recovery_raises_closed(self):
+        with self.assertRaises(ClosedError):
+            self.backend.recover(None)
+
     def test_missing_index_does_not_initialize_real_hardware(self):
         # Enumeration only: an impossibly large index never opens a USB handle.
         with self.assertRaises(DeviceNotFoundError):

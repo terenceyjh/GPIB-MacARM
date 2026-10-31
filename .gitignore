@@ -10,3 +10,10 @@ src/gpib_macarm/_driver.*
 *.log
 hardware-smoke*.json
 readings.csv
+
+# Private handoffs and detailed local evidence
+/local-notes/
+/AGENTS.md
+/LOCAL_INSTALL.md
+/GPIB_开发测试记录.md
+/docs/MAC_ACCEPTANCE.md

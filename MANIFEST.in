@@ -1,11 +1,16 @@
 include LICENSE THIRD_PARTY.md UPSTREAM.json README.md README.zh-CN.md CLAUDE.md CHANGELOG.md .gitattributes .gitignore
 include docs/ARCHITECTURE.md docs/VALIDATION.md
+include docs/BENCH_TESTS.md
 include release/README.md release/README.zh-CN.md release/CLAUDE.md
 include tools/make_delivery.py tools/hardware_smoke.py tools/keithley_2400_iv.py tools/sr830_recovery_check.py tools/test_native.sh tools/vendor_patch.py
+include tools/keithley_2400_acquire.py
+include tools/keithley_2400_check.py
+include tools/bus_smoke.py
+include tools/bench_acceptance.py
 recursive-include native *.cpp *.h
 recursive-include vendor *.c *.cpp *.h README AUTHORS COPYING *.patch
 recursive-include examples *.py
-recursive-include tests *.py *.c
+recursive-include tests *.py *.c *.cpp
 exclude AGENTS.md LOCAL_INSTALL.md GPIB_开发测试记录.md docs/MAC_ACCEPTANCE.md
 global-exclude *.so *.dylib *.dll *.pyd *.o *.pyc *.log .DS_Store
 prune local-notes

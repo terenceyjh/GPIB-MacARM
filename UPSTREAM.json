@@ -75,7 +75,7 @@
     },
     "linux-gpib/ni_usb_gpib.c": {
       "upstream_sha256": "a4750698cfbf5b7a5e47a4d18c27ccdada7fb705f99d5b890b4d269db2a314b9",
-      "local_sha256": "656c99576d2115df1f99f6883973d6e3d08a27b8d0b0ed89a39601b0bd06022e"
+      "local_sha256": "11864784d48fa8897ef4b5c80e609e6a9f1647efbba2692ea27bb678b5254f28"
     },
     "linux-gpib/ni_usb_gpib.h": {
       "upstream_sha256": "1959cc09c1f1591e29d9f4b0645b92b901e6af1a1f33552d65eb505ce2aa5724",

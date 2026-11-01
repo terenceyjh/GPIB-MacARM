@@ -89,8 +89,18 @@ class Controller {
     usb_interface intf{};
     gpib_board board{};
     bool registered = false, probed = false, attached = false, board_ready = false;
+    bool io_failed = false;
     int pad;
+    int read_address = -1;
+    void require_read_finished() const {
+        if (read_address >= 0)
+            throw Error(INVALID,"Finish the pending GPIB reply or explicitly recover before changing the bus.");
+    }
     void cleanup() noexcept {
+        // Disconnect cancels local URBs and marks the interface unavailable.
+        // Detach then frees driver state without appending register requests to
+        // a failed operation's outstanding response queue.
+        if ((io_failed || read_address >= 0) && probed) { g_ni_usb_driver->disconnect(&intf); probed=false; }
         if (attached) { g_ni_gpib_interface->detach(&board); attached = false; }
         if (probed) { g_ni_usb_driver->disconnect(&intf); probed = false; }
         if (registered) {
@@ -148,6 +158,16 @@ class Controller {
     }
 public:
     std::mutex mutex;
+#ifdef GPIB_MACARM_TEST
+    // Offline tests exercise the real transfer/lifecycle methods against a
+    // protocol model; this constructor is absent from the installed library.
+    explicit Controller(gpib_interface *interface,bool lifecycle=false,ni_usb_private_t *state=nullptr) : pad(0) {
+        board.interface=interface; board.pad=pad; board.usec_timeout=1000000;
+        board.private_data=state;
+        attached=probed=lifecycle;
+    }
+#endif
+    void mark_failed() noexcept { io_failed=true; }
     Controller(int index, int board_pad, unsigned timeout, const char *serial) : pad(board_pad) {
         if (pad < 0 || pad > 30 || index < 0) throw Error(INVALID, "Invalid controller address or adapter index.");
         try {
@@ -204,11 +224,11 @@ public:
             init_gpib_pseudo_irq(&board.pseudo_irq);
             gpib_board_config cfg{};
             int r=board.interface->attach(&board,&cfg);
-            if (r < 0) { board.interface->detach(&board); check(r,"NI driver attach"); }
-            attached=true;
+            attached=true; // detach also owns partially initialized attach state
+            check(r,"NI driver attach");
             check(kg_ni_remote(&board,1),"Enable remote (REN)");
             check(kg_ni_ifc(&board),"Interface clear (IFC)");
-        } catch (...) { cleanup(); throw; }
+        } catch (...) { io_failed=true; cleanup(); throw; }
     }
     ~Controller() { cleanup(); }
     void recover(unsigned wait_ms) {
@@ -238,9 +258,11 @@ public:
         }
         if (!empty) throw Error(PROTOCOL,"Adapter completion queue did not become empty.");
         check(kg_ni_ifc(&board),"Recovery interface clear (IFC)");
+        read_address=-1;
         cmd({SPD,UNL,UNT});
         board.interface->disable_eos(&board);
         check(usb_submit_urb(p->interrupt_urb,GFP_KERNEL),"Restart adapter status polling");
+        io_failed=false;
     }
     void timeout(unsigned us) {
         if (!us || us > 1000000000U) throw Error(INVALID,"Timeout must be 1..1000000000 microseconds.");
@@ -249,6 +271,7 @@ public:
     size_t write(int addr, const uint8_t *data, size_t size, bool eoi) {
         address(addr,pad);
         if (!size || size>65535) throw Error(INVALID,"One native write must contain 1..65535 bytes.");
+        require_read_finished();
         size_t written=0;
         cmd({MTA(static_cast<uint32_t>(pad)),UNL,MLA(static_cast<uint32_t>(addr))});
         int r=board.interface->write(&board,const_cast<uint8_t *>(data),size,eoi,&written);
@@ -260,25 +283,40 @@ public:
     size_t read(int addr,uint8_t *data,size_t size,int eos,int *end) {
         address(addr,pad);
         if (!size || size>65535 || eos < -1 || eos > 255) throw Error(INVALID,"Invalid read size or EOS.");
+        // A 65535-byte IBRD request wedged the tested HS on a 40003-byte
+        // binary reply. Bound individual requests to the validated size;
+        // callers continue until END, so this never truncates a message.
+        size=std::min(size,size_t{4096});
+        if (read_address >= 0 && read_address != addr) require_read_finished();
         size_t count=0; *end=0;
         board.interface->disable_eos(&board);
         try {
             if (eos>=0) check(board.interface->enable_eos(&board,static_cast<uint8_t>(eos),1),"Enable EOS");
-            cmd({UNL,MLA(static_cast<uint32_t>(pad)),MTA(static_cast<uint32_t>(addr))});
+            if (read_address < 0) {
+                cmd({UNL,MLA(static_cast<uint32_t>(pad)),MTA(static_cast<uint32_t>(addr))});
+                read_address=addr;
+            }
             int r=board.interface->read(&board,data,size,end,&count);
             board.interface->disable_eos(&board); check(r,"GPIB read");
         } catch (...) { board.interface->disable_eos(&board); throw; }
         if (count>size) throw Error(PROTOCOL,"Driver returned an invalid byte count.");
-        unaddress();
+        // Keep the talker addressed across count-limited reads. Untalking
+        // mid-message can corrupt a 2400 binary stream (manual 18-48/49).
+        if (*end) {
+            unaddress();
+            read_address=-1;
+        }
         return count;
     }
     void clear(int addr) {
         address(addr,pad);
+        require_read_finished();
         cmd({UNL,MLA(static_cast<uint32_t>(addr)),SDC}); unaddress();
     }
-    void ifc() { check(kg_ni_ifc(&board),"Interface clear (IFC)"); }
-    void remote(bool enabled) { check(kg_ni_remote(&board,enabled),"Set remote (REN)"); }
+    void ifc() { require_read_finished(); check(kg_ni_ifc(&board),"Interface clear (IFC)"); }
+    void remote(bool enabled) { require_read_finished(); check(kg_ni_remote(&board,enabled),"Set remote (REN)"); }
     uint8_t poll(int addr) {
+        require_read_finished();
         address(addr,pad); uint8_t b=0; size_t n=0; int end=0;
         cmd({UNL,MLA(static_cast<uint32_t>(pad)),SPE}); cmd({MTA(static_cast<uint32_t>(addr))});
         int r=board.interface->read(&board,&b,1,&end,&n);
@@ -304,7 +342,13 @@ template<class F> int handle_device(void *p,F fn) noexcept {
     return call([&] {
         if (!p) throw Error(CLOSED,"Controller is closed.");
         auto &d=*static_cast<Controller *>(p);
-        std::lock_guard<std::mutex> guard(d.mutex); fn(d);
+        std::lock_guard<std::mutex> guard(d.mutex);
+        try { fn(d); }
+        catch (const Error &e) {
+            if (e.kind != INVALID && e.kind != CLOSED) d.mark_failed();
+            throw;
+        }
+        catch (...) { d.mark_failed(); throw; }
     });
 }
 }

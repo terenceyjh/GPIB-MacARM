@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "gpib-macarm"
 version = "0.1.0"
-description = "Python GPIB communication for Apple Silicon Macs, derived from KAME and linux-gpib"
+description = "Userspace GPIB driver for Apple Silicon Macs with Python bindings, derived from KAME and linux-gpib"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "GPL-2.0-or-later"

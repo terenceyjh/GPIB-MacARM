@@ -3,6 +3,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 cc_bin="${CC:-cc}"
+cxx_bin="${CXX:-c++}"
 incs=(-Ivendor/kame -Ivendor/kame/linux-gpib)
 links=(-lusb-1.0 -pthread)
 if command -v pkg-config >/dev/null 2>&1; then
@@ -17,7 +18,12 @@ mkdir -p build/native-tests
 flags=(-std=gnu11 -O1 -g -pthread -fsanitize=address,undefined -fno-omit-frame-pointer)
 "$cc_bin" "${flags[@]}" "${incs[@]}" tests/test_compat.c "${links[@]}" -o build/native-tests/test_compat
 build/native-tests/test_compat
-"$cc_bin" "${flags[@]}" "${incs[@]}" tests/test_parser.c \
-    vendor/kame/linux-gpib/ni_usb_gpib.c vendor/kame/gpib_stubs.c \
+"$cc_bin" "${flags[@]}" "${incs[@]}" -c vendor/kame/linux-gpib/ni_usb_gpib.c -o build/native-tests/ni_usb_gpib.o
+"$cc_bin" "${flags[@]}" "${incs[@]}" -c vendor/kame/gpib_stubs.c -o build/native-tests/gpib_stubs.o
+objects=(build/native-tests/ni_usb_gpib.o build/native-tests/gpib_stubs.o)
+"$cc_bin" "${flags[@]}" "${incs[@]}" tests/test_parser.c "${objects[@]}" \
     "${links[@]}" -o build/native-tests/test_parser
 build/native-tests/test_parser
+"$cxx_bin" -std=gnu++17 "${flags[@]:1}" "${incs[@]}" tests/test_driver.cpp "${objects[@]}" \
+    "${links[@]}" -o build/native-tests/test_driver
+build/native-tests/test_driver

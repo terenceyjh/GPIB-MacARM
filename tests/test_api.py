@@ -105,6 +105,27 @@ class APITests(unittest.TestCase):
         writes = [e for e in self.fake.events if e[0]=="write"]
         self.assertEqual([(len(e[2]),e[3]) for e in writes], [(65535,False),(1,True)])
 
+    def test_raw_write_no_eoi_on_any_chunk(self):
+        self.inst.send_end = False
+        payload = b'\x00\xff' * 32768
+        self.assertEqual(self.inst.write_raw(payload), len(payload))
+        writes = [e for e in self.fake.events if e[0] == 'write']
+        self.assertEqual([(len(e[2]), e[3]) for e in writes], [(65535, False), (1, False)])
+        self.assertEqual(b''.join(e[2] for e in writes), payload)
+
+    def test_missing_intermediate_completion_does_not_send_final_eoi(self):
+        original = GpibTimeoutError('write completion missing')
+        calls = []
+        def no_ack(handle, addr, data, eoi):
+            calls.append((addr, data, eoi))
+            raise original
+        self.fake.write = no_ack
+        with self.assertRaises(GpibTimeoutError) as caught:
+            self.inst.write_raw(b'x' * 65536)
+        self.assertIs(caught.exception, original)
+        self.assertEqual([(len(data), eoi) for _, data, eoi in calls], [(65535, False)])
+        self.assertTrue(self.bus.faulted)
+
     def test_partial_write_is_not_retried(self):
         calls = []
         def short(*args):

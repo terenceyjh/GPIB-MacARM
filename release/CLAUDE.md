@@ -8,7 +8,7 @@ This guide belongs to the **installation ZIP**, not an unpacked source checkout.
 
 ## 1. Scope / 项目与版本
 
-GPIB-MacARM supplies a **userspace native driver + Python API for ARM Macs**, primarily for NI GPIB-USB-HS. **Core driver credit: [KAME](https://github.com/northriv/KAME) / [linux-gpib](https://linux-gpib.sourceforge.io/).** No NI-488.2, NI-VISA, kernel extension or background service is required.
+GPIB-MacARM brings **GPIB instrument communication to Apple Silicon Macs**, primarily through NI GPIB-USB-HS. The userspace C/C++ driver currently provides Python bindings and a CLI through a C ABI. **Core driver credit: [KAME](https://github.com/northriv/KAME) / [linux-gpib](https://linux-gpib.sourceforge.io/).** No NI-488.2, NI-VISA, kernel extension or background service is required.
 
 - Distribution/CLI: `gpib-macarm`; Python import: `gpib_macarm`; version: `0.1.0`, early development.
 - Requirements: Apple Silicon Mac, arm64 Python 3.10+, matching arm64 libusb, C/C++ build tools and pkg-config.
@@ -19,21 +19,15 @@ GPIB-MacARM supplies a **userspace native driver + Python API for ARM Macs**, pr
 
 ## 2. Install / 详细安装
 
-Use the user's chosen Python environment when explicitly requested. Otherwise create a dedicated venv; do not silently replace an existing Conda/base installation. First inspect architecture:
-
-```bash
-uname -m
-/opt/homebrew/bin/python3 -c 'import platform, sys; print(platform.machine()); print(sys.executable)'
-```
-
-Expected architecture is `arm64`. If Homebrew Python is missing, install it below. A Rosetta x86_64 Python cannot use arm64 libusb.
-
-用户明确指定环境时遵从该选择；默认新建独立 venv。不要悄悄覆盖 Conda base。Python 和 libusb 必须都是 arm64；缺少 Homebrew 时，按其官方网站安装后再继续。
+Install into the default arm64 Python's user package directory, using the same interpreter for installation and execution. If the user explicitly selects another interpreter, respect that choice. First prepare the build tools:
 
 ```bash
 xcode-select --install  # skip if installed; complete the installer before continuing
 brew install python libusb pkg-config
+python3 -c 'import platform, sys; print(platform.machine()); print(sys.executable)'
 ```
+
+Expected architecture is `arm64`, Python 3.10+. A Rosetta x86_64 Python cannot use arm64 libusb. 用户默认使用 ARM Python 的用户包目录；先按 Homebrew 官网准备好 Homebrew，再检查 Python 与 libusb 架构一致。
 
 In Terminal, enter the extracted installation folder and verify these files exist:
 
@@ -45,36 +39,34 @@ ls README.md README.zh-CN.md CLAUDE.md gpib_macarm-0.1.0.tar.gz
 Then install **the adjacent archive**, without extracting it:
 
 ```bash
-/opt/homebrew/bin/python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install ./gpib_macarm-0.1.0.tar.gz
-python -m gpib_macarm info
-python -m pip check
-python -m pip show gpib-macarm
+python3 -m pip install --user --break-system-packages --upgrade pip setuptools wheel
+python3 -m pip install --user --break-system-packages --no-build-isolation ./gpib_macarm-0.1.0.tar.gz
+python3 -m gpib_macarm info
+python3 -m pip check
+python3 -m pip show gpib-macarm
 ```
 
 Expected: version `0.1.0`, `arm64`, an existing native-library path and no broken requirements. `info` loads the driver but does not open an instrument. Keep libusb installed at runtime. The package is not on PyPI. pip may download build dependencies; the archive already contains the driver source, so no separate KAME checkout is needed.
 
-预期结果：版本 `0.1.0`、架构 `arm64`、可加载的原生库、无损坏依赖。项目不在 PyPI，不要用 `pip install gpib-macarm` 替代安装本地 tar.gz，也不要复制别人的 `.dylib` 或 venv。
+预期结果：版本 `0.1.0`、架构 `arm64`、可加载的原生库、无损坏依赖。项目不在 PyPI，不要用 `pip install gpib-macarm` 替代安装本地 tar.gz，也不要复制别人的 `.dylib`。
 
-For a new terminal, return to this folder and run `source .venv/bin/activate`. In an IDE/Jupyter notebook select this same environment's interpreter. To check file integrity, run `shasum -a 256 -c SHA256SUMS.txt` in this folder.
+`--user --break-system-packages` permits user-directory installation with Homebrew Python; do not use sudo or change global pip configuration. Use the same `python3` in new terminals and your IDE. Check integrity with `shasum -a 256 -c SHA256SUMS.txt` in this folder. See [pip options](https://pip.pypa.io/en/stable/cli/pip_install/).
 
-新终端需重新激活；IDE/Jupyter 也需选择相同解释器。使用 `python -m pip`，避免安装到一个环境，却在另一个环境导入。
+无需额外激活步骤；运行脚本和 IDE 都使用上述 `python3`。通过 `python3 -m pip` 安装，避免解释器与安装目标不一致。
 
 ## 3. First communication / 首次连接
 
 Before instrument access, confirm the model, actual primary address and intended commands. Close other acquisition programs using the adapter. Installation permission does not itself authorize resets, configuration changes or source output. `list` only enumerates USB adapters:
 
 ```bash
-python -m gpib_macarm list
+python3 -m gpib_macarm list
 ```
 
 With the actual address confirmed, perform a supported read-only identity query:
 
 ```bash
 # 24 is an example, not an address scan / 24 只是示例，请使用真实地址
-python -m gpib_macarm query --address 24 --timeout 10000 '*IDN?'
+python3 -m gpib_macarm query --address 24 --timeout 10000 '*IDN?'
 ```
 
 Opening a controller sends **REN/IFC**, affecting the shared bus. The identity command does not reset instruments or enable outputs. `list_resources()` lists adapter interfaces, not instrument addresses. Keep **LF + EOI** defaults and **`send_end=True`**.
@@ -127,13 +119,19 @@ For basic PyVISA scripts use `import gpib_macarm as pyvisa` and **`ResourceManag
 | A new write/poll/clear is refused after `read_bytes()` / 部分读取后拒绝新操作 | The earlier reply has not ended. Finish reading it, or deliberately discard it via explicit recovery before new commands. / 先读完旧回复，或显式恢复丢弃；不要把残留回复当成新数据。 |
 | Slow measurement times out / 长测量超时 | Increase `timeout` for the instrument's full batch duration. It is per transfer, not an exact whole-query deadline. / 按整批时长设置，不照搬身份查询的超时。 |
 | Source output state is unknown / 输出状态不明 | Stop acquisition and check the actual instrument state. Closing, clearing or recovering communication does not prove output is off. / 核对真实输出；恢复通信不等于关输出。 |
-| `ModuleNotFoundError` / 无法导入 | Activate the installed environment and inspect `sys.executable` and `python -m pip show gpib-macarm`. / 核对解释器和安装目标。 |
+| `ModuleNotFoundError` / 无法导入 | Inspect `sys.executable` and `python3 -m pip show gpib-macarm`; use the interpreter that installed the package. / 核对解释器和安装目标。 |
 | Native architecture/library error / 架构不兼容或找不到库 | Use arm64 Python + arm64 Homebrew libusb; check any `GPIB_MACARM_LIBRARY` override. Reinstall in the intended environment. / 统一架构并重新安装，不手动复制原生库。 |
 | libusb headers/compiler missing / 缺头文件或编译器 | Finish Command Line Tools installation; install `libusb pkg-config`; check `pkg-config --modversion libusb-1.0`. / 补齐构建工具。 |
-| Native driver older than Python API / 原生库与 Python API 不匹配 | Restart processes and reinstall this archive with `python -m pip install --no-cache-dir --force-reinstall --no-deps ./gpib_macarm-0.1.0.tar.gz`. / 重装并重启已加载旧库的进程。 |
+| Native driver older than Python API / 原生库与 Python API 不匹配 | Restart processes and reinstall this archive with `python3 -m pip install --user --break-system-packages --no-build-isolation --no-cache-dir --force-reinstall --no-deps ./gpib_macarm-0.1.0.tar.gz`. / 重装并重启已加载旧库的进程。 |
 | `list` is empty / 找不到转接线 | Check USB connection, macOS accessory permission and adapter model. / 检查线缆与访问权限；不代表支持任意 USB 转接线。 |
 | USB busy/access denied / 设备被占用或拒绝访问 | Close other users of the adapter and check competing drivers/accessory permission. / 排查其他控制程序或驱动，不通过关闭系统安全机制解决。 |
 | Adapter appears but no identity reply / 找到线缆但无回复 | Check power, GPIB interface, actual address, instrument-supported query and LF + EOI. Stop on failure; do not repeatedly send queries. / 核对仪器配置与终止方式，失败后停止。 |
+
+### What the EOI issue means / EOI 问题的含义
+
+GPIB permits data transfers without EOI: byte acceptance uses DAV/NRFD/NDAC handshakes, while EOI marks a message boundary. The 2400 also accepts LF alone to end a command. Our LF+EOI and EOI-only identity queries passed; with LF-only/no EOI, the instrument produced the original correct reply, but the expected USB write-completion response was missing and the driver timed out. The cause remains unresolved; do not call it a GPIB restriction or a proven adapter firmware defect. See [NI's handshake/termination explanation](https://download.ni.com/support/manuals/370904a.pdf) and [2400 manual, §14](https://download.tek.com/manual/2400S-900-01_K-Sep2011_User.pdf).
+
+无 EOI 是协议支持的正常操作。当前兼容问题位于可靠写完成确认：收到某条查询的回复只能证明该次命令送达，不能代替所有写操作的完成确认。与 linux-gpib 一样，驱动设置 EOI 标志并等待真实 USB 完成状态；缺少回包不当作成功，不自动重发。默认 LF+EOI 可正常使用；超过 65535 字节的大写入依赖无 EOI 中间块，仍未支持。大读取与大写入要分别看待。
 
 ### Explicit recovery / 显式恢复细节
 
@@ -151,17 +149,26 @@ print(instrument.query("*IDN?"))
 
 恢复可能等待较久并清除旧回复，影响仪器操作；默认 MAV 语义不能随意推广到所有仪器。尚未在当前仪器验证时，不声称恢复保证成功。没有缓存身份时，应按仪器支持的方式自行核对身份/状态。不要自动恢复后继续旧批次。
 
-## 6. Development direction / 后续开发
+## 6. Test scope and further work / 测试范围与未来方向
 
-Priorities: **no-EOI writes and final-chunk EOI**, 2400/other-hardware and unplug/power-loss recovery, binary/longer/multi-instrument acquisition, cross-machine ARM Mac installation and macOS CI.
+This ZIP's guides were updated on 2026-11-02; its inner driver source archive and v0.1.0 tag are unchanged. Released-version tests cover repeated 2400/SR830 communication, finite 2400 acquisition, and a 42-minute SR830 scan with tested fault recovery. Single-2400 USB/power recovery, large binary reads and a one-hour / 10040-point run passed on later development revisions, **not this installer's driver**. The latest development completion-frame validation passed 93 offline tests and native ASan/UBSan, but its hardware recheck is pending. Detailed version-specific results are in the [public test record](https://github.com/terenceyjh/GPIB-MacARM/blob/main/docs/VALIDATION.md).
 
-开发源码位于内层 tar.gz，只有要改代码时才需要手动展开：
+本安装包沿用原 v0.1.0 驱动；后续开发结果不自动归属于它。测量准确度、无 EOI、依赖无 EOI 的大写入、更多设备/固件及真实多仪器共线尚未验收。
+
+Possible future work, selected according to actual need:
+
+1. **No-EOI completion:** compare the same adapter with official NI-488.2, identify a reliable completion mechanism, then test final-chunk-only EOI writes. Normal default-EOI use need not wait for this.
+2. **More hardware:** test additional instruments and adapter models/firmware, including appropriate error recovery.
+3. **Multiple instruments:** verify complete interleaved queries, reply isolation and shared-controller fault/recovery using at least two real devices with distinct confirmed addresses.
+4. **More ARM Macs:** broaden macOS/Python and installation coverage when requested; Intel Mac is outside the current target.
+
+未来可继续测试 EOI、更多仪器/转接线和真实多设备共线；保留已正常工作的 C/Python 分层与分块方式，按实际问题做针对性修改。
+
+For development, obtain the repository/source checkout rather than editing this outer installation folder. Install its source into the selected interpreter and run:
 
 ```bash
-tar -xzf gpib_macarm-0.1.0.tar.gz
-cd gpib_macarm-0.1.0
-python -m pip install --no-cache-dir --force-reinstall --no-deps -e .
-python -m unittest discover -s tests -v
+python3 -m pip install --user --break-system-packages --no-build-isolation --no-cache-dir --force-reinstall --no-deps -e .
+python3 -m unittest discover -s tests -v
 bash tools/test_native.sh
 ```
 
@@ -171,6 +178,6 @@ Read the source tree's own `CLAUDE.md` and architecture/test summary before edit
 
 ## 7. Prompt to give an agent / 可直接交给 agent 的 prompt
 
-> Read this CLAUDE.md and the adjacent README. Install the adjacent gpib_macarm-0.1.0.tar.gz in a dedicated arm64 Python environment, verify architecture, native info and pip check. Report the interpreter and result. Do not access instruments yet. For later communication, confirm the model/address and command scope; preserve default EOI and apply the known-issue workarounds above.
+> Read this CLAUDE.md and the adjacent README. Install the adjacent gpib_macarm-0.1.0.tar.gz into the default arm64 Python's user package directory, verify architecture, native info and pip check. Report the interpreter and result. Do not access instruments yet. For later communication, confirm the model/address and command scope; preserve default EOI and apply the known-issue workarounds above.
 >
-> 请阅读本文件及同文件夹的 README，在独立 arm64 Python 环境安装旁边的 gpib_macarm-0.1.0.tar.gz，核对架构、native info 和 pip check，报告解释器与结果。先不访问仪器。后续连接前确认型号、地址与操作范围，保留默认 EOI，按上面的已知问题处理办法操作。
+> 请阅读本文件及同文件夹的 README，在默认 arm64 Python 的用户包目录安装旁边的 gpib_macarm-0.1.0.tar.gz，核对架构、native info 和 pip check，报告解释器与结果。先不访问仪器。后续连接前确认型号、地址与操作范围，保留默认 EOI，按上面的已知问题处理办法操作。

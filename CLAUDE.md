@@ -6,11 +6,11 @@ This is the **public, portable guide** shipped with the repository and release. 
 
 ## Project / 项目定位
 
-- Userspace GPIB driver + Python API for **Apple Silicon / ARM Macs**, primarily NI GPIB-USB-HS. Core driver credit: **KAME / linux-gpib**.
+- **GPIB communication on Apple Silicon / ARM Macs** is the project goal. The userspace C/C++ driver currently exposes a C ABI, Python bindings and a CLI, primarily for NI GPIB-USB-HS. Core driver credit: **KAME / linux-gpib**.
 - Package/CLI: `gpib-macarm`; import: `gpib_macarm`; Python 3.10+. Early development, version 0.1.0.
 - Tested instruments: **Keithley 2400 and SRS SR830**, not 2450. A successful build or skipped test is not hardware validation.
 - `ResourceManager()` takes no `"@py"` backend argument. Keep default LF and **`send_end=True`**. No-EOI writes currently fail.
-- 本项目针对 ARM Mac；通信测试不等于测量准确度通过，不要将离线测试或恢复成功写成所有硬件功能已通过。
+- 本项目首先是 Apple Silicon Mac 上的 GPIB 驱动，目前主要提供 Python 接口；通信测试不等于测量准确度验收，不要将离线测试或恢复成功写成所有硬件功能已通过。
 
 ## Install and verify / 安装与检查
 
@@ -19,24 +19,23 @@ Use arm64 Python and matching libusb. From the extracted source/repository direc
 ```bash
 xcode-select --install  # only if Command Line Tools are missing
 brew install python libusb pkg-config
-/opt/homebrew/bin/python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install .
-python -m gpib_macarm info
-python -m pip check
+python3 -c 'import platform, sys; print(platform.machine()); print(sys.executable)'
+python3 -m pip install --user --break-system-packages --upgrade pip setuptools wheel
+python3 -m pip install --user --break-system-packages --no-build-isolation .
+python3 -m gpib_macarm info
+python3 -m pip check
 ```
 
-A downloaded sdist can instead be installed with `python -m pip install ./gpib_macarm-0.1.0.tar.gz`. The package is not on PyPI. Source compilation needs the tools above; libusb is also needed at runtime. Use the selected interpreter's `python -m pip`, not an unrelated pip executable.
+A downloaded sdist can instead be installed with `python3 -m pip install --user --break-system-packages --no-build-isolation ./gpib_macarm-0.1.0.tar.gz`. The package is not on PyPI. Source compilation needs the tools above; libusb is also needed at runtime. Install into the default arm64 Python's user package directory with `--user --break-system-packages`; do not use sudo. Use the same interpreter for pip and execution. See [pip options](https://pip.pypa.io/en/stable/cli/pip_install/).
 
 源码包可直接通过上述 pip 命令安装，不要假定 PyPI 上已有此包。先确认 Python 为 arm64；不要混用 Rosetta Python 与 ARM libusb，也不要复制其他机器的原生库或虚拟环境。
 
 For development / 开发安装与检查:
 
 ```bash
-python -m pip install --no-cache-dir --force-reinstall --no-deps -e .
-python -m gpib_macarm info
-python -m unittest discover -s tests -v
+python3 -m pip install --user --break-system-packages --no-build-isolation --no-cache-dir --force-reinstall --no-deps -e .
+python3 -m gpib_macarm info
+python3 -m unittest discover -s tests -v
 bash tools/test_native.sh
 ```
 
@@ -51,23 +50,39 @@ Confirm the model, actual primary address and intended commands before hardware 
 仪器操作前确认型号、真实地址和命令范围。软件安装本身不等于允许复位或开输出；按用户实际授权执行。只在没有其他采集占用转接线时进行硬件测试。
 
 ```bash
-python -m gpib_macarm list
+python3 -m gpib_macarm list
 # Example only: replace 24 with the confirmed instrument address.
-python -m gpib_macarm query --address 24 --timeout 10000 '*IDN?'
+python3 -m gpib_macarm query --address 24 --timeout 10000 '*IDN?'
 ```
 
-Timeout is in milliseconds per transfer, not a strict deadline for the complete query. Set it for the whole measurement's expected wait. Never automatically replay failed writes, triggers or measurements. I/O failures fault the shared controller; stop the failed batch. Explicit `recover(timeout=20000)` is verified only on the tested SR830 setup and can take longer than its first-stage wait. Reconfirm identity/settings and actual source output state before starting a new batch; clear/IFC/reopen are not universal recovery guarantees.
+Timeout is in milliseconds per transfer, not a strict deadline for the complete query. Set it for the whole measurement's expected wait. Never automatically replay failed writes, triggers or measurements. I/O failures fault the shared controller; stop the failed batch. Explicit `recover(timeout=20000)` is verified on the tested SR830 setup and, in unreleased development, the 2400 setup; it can take longer than its first-stage wait. Reconfirm identity/settings and actual source output state before starting a new batch; clear/IFC/reopen are not universal recovery guarantees.
 
 超时后停止失败批次，不自动重发命令。`recover()` 恢复通信不等于输出已关闭；恢复后核对身份、设置和实际状态，再开始新批次。`tools/keithley_2400_iv.py` 会复位、改设置并开启输出，故障复现脚本会故意制造超时，均不属于普通身份查询。
 
-## Next development priorities / 下一步开发方向
+## EOI compatibility / EOI 兼容限制
 
-1. **No-EOI writes:** isolate NI USB requests/completion status and GPIB handshakes; add a reproducer, fix the evidenced cause and verify on hardware. Then test large writes with EOI only on the last chunk. Do not call this supported merely because fake-backend tests pass.
-2. **Recovery coverage:** retest the 2400, unplug/power loss, different firmware and status-byte behavior. Preserve the original failure and avoid stale replies or command replay.
-3. **Transfer and acquisition coverage:** binary transfers, larger messages, longer runs and multiple instruments on one bus.
-4. **Distribution:** cross-machine ARM Mac installs, more macOS/Python combinations and macOS CI.
+Keep default LF + `send_end=True`. GPIB allows no-EOI transfers; the 2400 explicitly accepts LF-only command termination. On the tested combination, LF+EOI and EOI-only identity queries passed, but an LF-only/no-EOI query produced a correct instrument reply while its USB write-completion response was missing. The driver therefore reports a timeout. This does not establish a protocol restriction or a proven firmware defect.
 
-对应重点：无 EOI 写入及分块写入 → 扩展异常恢复 → 二进制与长期/多仪器采集 → 安装兼容性和 CI。Intel Mac 不属于当前验收范围。
+默认 LF+EOI 已验证可用。无 EOI 是协议允许、2400 也支持的用法；当前问题是缺少转接线的可靠 USB 写完成确认，根因尚未确定。沿用 linux-gpib 的标志及真实完成回包处理，不伪造确认，不因 USB OUT 成功或一次查询有回复就认定通用写入成功，不自动重放命令。超过 65535 字节的写入因中间块不发 EOI 而仍不支持；大读取已经单独验证。
+
+The completion-frame validation added on 2026-11-02 passed offline/native checks; its rebuilt hardware check remains pending. It does not fix missing completions. Preserve the working C/Python split, chunking and addressing unless a demonstrated failure requires a focused change. Protocol references: [NI termination guide, chapter 7](https://download.ni.com/support/manuals/370904a.pdf), [2400 manual, §14](https://download.tek.com/manual/2400S-900-01_K-Sep2011_User.pdf).
+
+## Possible further work / 未来可继续开发与测试
+
+These are candidate directions, not a requirement to expand every task. Default-EOI use need not wait for a no-EOI workaround.
+
+1. **EOI:** when needed, compare the same adapter under official NI-488.2 with the current implementation, identify a reliable no-EOI completion mechanism, then validate final-chunk-only EOI large writes. Retain failures when confirmation is absent.
+2. **More hardware:** test additional instruments and adapter models/firmware, including identity, text/raw transfers and appropriate recovery. The current tested instruments are 2400 and SR830; do not infer other-model compatibility.
+3. **Multiple instruments:** use at least two real devices at distinct confirmed addresses on one bus; verify interleaved complete queries, partial-reply isolation and shared-controller failure/recovery. Two sessions to one device do not establish this coverage.
+4. **Mac coverage:** test more Apple Silicon machines, macOS and Python combinations when requested. Intel Mac is outside the current target; CI/distribution expansion is optional future work.
+
+未来方向为无 EOI 完成确认、更多仪器/固件、真实多仪器共线，以及更多 ARM Mac 环境。按实际需求选择，不为了补齐清单反复修改可用功能。
+
+## Current evidence / 当前验证范围
+
+The development tree passed single-2400 USB/power recovery, timeout/partial/over-limit recovery, large ASCII/binary reads and a one-hour / 10040-point acquisition. **93 offline tests and native ASan/UBSan checks passed.** No-EOI support, dependent large writes, real multi-instrument operation and measurement accuracy remain unvalidated. See [test results](docs/VALIDATION.md) and [bench instructions](docs/BENCH_TESTS.md) for the tested revisions and limits.
+
+开发测试与已发布版本必须分开：v0.1.0 安装 ZIP 的外层文档已更新，内层驱动源码包沿用原版；后续驱动改动未进入该安装包。最新完成回包校验尚待实物复验，不能把此前的采集结果写成对这一改动的验证。
 
 Keep C ABI signatures and ctypes declarations aligned; no C++ exceptions may cross the ABI. Preserve NUL/CR/LF in raw data; never silently truncate an over-limit reply. Hold the shared controller lock across complete queries. Changes to message boundaries, native parsing and fault handling need meaningful regression checks.
 
@@ -75,9 +90,9 @@ Keep C ABI signatures and ctypes declarations aligned; no C++ exceptions may cro
 
 ### Install / 安装
 
-> Read CLAUDE.md and the README. Install GPIB-MacARM in a new arm64 Python environment using pip from the provided source archive/folder. Check Python/libusb architecture, native info and pip check. Report the interpreter and result. Do not access instruments yet.
+> Read CLAUDE.md and the README. Install GPIB-MacARM into the default arm64 Python's user package directory using pip from the provided source archive/folder. Check Python/libusb architecture, native info and pip check. Report the interpreter and result. Do not access instruments yet.
 >
-> 请阅读 CLAUDE.md 和 README，用提供的源码包/目录，通过 pip 在新的 arm64 Python 环境安装；核对 Python/libusb 架构、native info 和 pip check，报告解释器与结果。先不访问仪器。
+> 请阅读 CLAUDE.md 和 README，用提供的源码包/目录，通过 pip 安装到默认 arm64 Python 的用户包目录；核对 Python/libusb 架构、native info 和 pip check，报告解释器与结果。先不访问仪器。
 
 ### First communication / 首次通信
 

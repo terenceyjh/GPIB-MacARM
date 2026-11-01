@@ -11,10 +11,14 @@ PUBLIC_ROOT_FILES = {
     "README.md", "README.zh-CN.md", "CLAUDE.md", "CHANGELOG.md",
     "pyproject.toml", "setup.py", "MANIFEST.in",
 }
-PUBLIC_DOCS = {"docs/ARCHITECTURE.md", "docs/VALIDATION.md"}
+PUBLIC_DOCS = {"docs/ARCHITECTURE.md", "docs/VALIDATION.md", "docs/BENCH_TESTS.md"}
 RELEASE_GUIDES = {"release/README.md", "release/README.zh-CN.md", "release/CLAUDE.md"}
 PUBLIC_TOOLS = {
     "tools/hardware_smoke.py", "tools/keithley_2400_iv.py",
+    "tools/keithley_2400_acquire.py",
+    "tools/keithley_2400_check.py",
+    "tools/bus_smoke.py",
+    "tools/bench_acceptance.py",
     "tools/sr830_recovery_check.py", "tools/make_delivery.py",
     "tools/test_native.sh", "tools/vendor_patch.py",
 }
@@ -23,7 +27,7 @@ SOURCE_TREES = {
     "native": {".cpp", ".h"},
     "vendor": {".c", ".cpp", ".h", ".patch"},
     "examples": {".py"},
-    "tests": {".py", ".c"},
+    "tests": {".py", ".c", ".cpp"},
 }
 VENDOR_NOTICES = {"README", "AUTHORS", "COPYING"}
 

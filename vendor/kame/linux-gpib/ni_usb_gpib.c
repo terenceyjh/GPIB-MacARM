@@ -720,6 +720,20 @@ int ni_usb_read(gpib_board_t *board, uint8_t *buffer, size_t length, int *end, s
 	return retval;
 }
 
+/* gpib-macarm: validate a real NI write-completion frame before trusting its
+ * status/count. This never manufactures a missing acknowledgement. */
+int kg_ni_parse_write_completion(const uint8_t *raw, int raw_length, size_t requested,
+    struct ni_usb_status_block *status)
+{
+    if (!raw || !status || raw_length != 12 || requested == 0 || requested > 0xffff)
+        return -EPROTO;
+    if (raw[0] != 0x0d || raw[8] != NIUSB_TERM_ID || raw[9] || raw[10] || raw[11])
+        return -EPROTO;
+    ni_usb_parse_status_block(raw, status);
+    if (status->count > requested) return -EPROTO;
+    return 0;
+}
+
 static int ni_usb_write(gpib_board_t *board, uint8_t *buffer, size_t length, int send_eoi, size_t *bytes_written)
 {
 	int retval;
@@ -794,9 +808,11 @@ static int ni_usb_write(gpib_board_t *board, uint8_t *buffer, size_t length, int
 		kfree(in_data);
 		return retval ? retval : -EPROTO;
 	}
-	ni_usb_parse_status_block(in_data, &status);
+	if (kg_ni_parse_write_completion(in_data, usb_bytes_read, length, &status)) {
+		kfree(in_data);
+		return -EPROTO;
+	}
 	kfree(in_data);
-	if (status.id != 0x0d || status.count > length) return -EPROTO;
 	switch(status.error_code)
 	{
 	case NIUSB_NO_ERROR:

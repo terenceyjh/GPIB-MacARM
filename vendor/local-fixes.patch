@@ -193,20 +193,44 @@
  	}
  	kfree(in_data);
  	switch(status.error_code)
-@@ -825,10 +792,11 @@
+@@ -751,6 +718,20 @@
+ 	else *end = 0;
+ 	*bytes_read = actual_length;
+ 	return retval;
++}
++
++/* gpib-macarm: validate a real NI write-completion frame before trusting its
++ * status/count. This never manufactures a missing acknowledgement. */
++int kg_ni_parse_write_completion(const uint8_t *raw, int raw_length, size_t requested,
++    struct ni_usb_status_block *status)
++{
++    if (!raw || !status || raw_length != 12 || requested == 0 || requested > 0xffff)
++        return -EPROTO;
++    if (raw[0] != 0x0d || raw[8] != NIUSB_TERM_ID || raw[9] || raw[10] || raw[11])
++        return -EPROTO;
++    ni_usb_parse_status_block(raw, status);
++    if (status->count > requested) return -EPROTO;
++    return 0;
+ }
+ 
+ static int ni_usb_write(gpib_board_t *board, uint8_t *buffer, size_t length, int send_eoi, size_t *bytes_written)
+@@ -825,9 +806,12 @@
  	{
  		printk("%s: %s: ni_usb_receive_bulk_msg returned %i, usb_bytes_read=%i\n", __FILE__, __FUNCTION__, retval, usb_bytes_read);
  		kfree(in_data);
 -		return retval;
+-	}
+-	ni_usb_parse_status_block(in_data, &status);
 +		return retval ? retval : -EPROTO;
- 	}
- 	ni_usb_parse_status_block(in_data, &status);
++	}
++	if (kg_ni_parse_write_completion(in_data, usb_bytes_read, length, &status)) {
++		kfree(in_data);
++		return -EPROTO;
++	}
  	kfree(in_data);
-+	if (status.id != 0x0d || status.count > length) return -EPROTO;
  	switch(status.error_code)
  	{
- 	case NIUSB_NO_ERROR:
-@@ -923,10 +891,11 @@
+@@ -923,10 +907,11 @@
  	{
  		printk("%s: %s: ni_usb_receive_bulk_msg returned %i, bytes_read=%i\n", __FILE__, __FUNCTION__, retval, bytes_read);
  		kfree(in_data);
@@ -219,7 +243,7 @@
  	*command_bytes_written = length - status.count;
  	switch(status.error_code)
  	{
-@@ -936,6 +905,8 @@
+@@ -936,6 +921,8 @@
  		/*this is expected if ni_usb_receive_bulk_msg got interrupted by a signal
  			and returned -ERESTARTSYS */
  		break;
@@ -228,7 +252,7 @@
  	case NIUSB_NO_BUS_ERROR:
  		return -ENOTCONN;
  		break;
-@@ -1024,7 +995,7 @@
+@@ -1024,7 +1011,7 @@
  		if(retval == 0) retval = -EIO;
  		printk("%s: %s: ni_usb_receive_bulk_msg returned %i, bytes_read=%i\n", __FILE__, __FUNCTION__, retval, bytes_read);
  		kfree(in_data);
@@ -237,7 +261,7 @@
  	}
  	ni_usb_parse_status_block(in_data, &status);
  	kfree(in_data);
-@@ -1826,6 +1797,7 @@
+@@ -1826,6 +1813,7 @@
  		return;
  	}
  
@@ -245,7 +269,7 @@
  	ni_usb_parse_status_block(urb->transfer_buffer, &status);
  // 	printk("debug: ibsta=0x%x\n", status.ibsta);
  
-@@ -2573,3 +2545,32 @@
+@@ -2573,3 +2561,32 @@
  
  module_init(ni_usb_init_module);
  module_exit(ni_usb_exit_module);

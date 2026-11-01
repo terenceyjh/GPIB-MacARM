@@ -83,6 +83,34 @@ class RecoveryTests(unittest.TestCase):
         self.assertTrue(self.bus.faulted)
         self.assertIs(self.bus._fault, original)
 
+    def test_nonstandard_mav_mask_is_used_without_replaying_queries(self):
+        self.fail_read()
+        states = iter([0x20, 0, 0])
+        self.backend.poll = lambda *_: next(states)
+        self.backend.replies = [(b'old\0\r\n', True)]
+        writes = len([e for e in self.backend.events if e[0] == 'write'])
+        self.first.recover(mav_mask=0x20)
+        self.assertEqual(self.bus.last_recovery['discarded_bytes'][8], 6)
+        self.assertEqual(len([e for e in self.backend.events if e[0] == 'write']), writes)
+
+    def test_recovery_discard_message_count_is_bounded(self):
+        original = self.fail_read()
+        self.backend.poll = lambda *_: 0x10
+        self.backend.replies = [(b'x', True)] * 16
+        with self.assertRaisesRegex(Exception, '16 discarded messages'):
+            self.first.recover()
+        self.assertIs(self.bus._fault, original)
+        self.assertTrue(self.bus.faulted)
+
+    def test_recovery_discard_byte_count_is_bounded(self):
+        original = self.fail_read()
+        self.backend.poll = lambda *_: 0x10
+        self.backend.replies = [(b'x' * 4096, False)] * 257
+        with self.assertRaises(MessageTooLongError):
+            self.first.recover()
+        self.assertIs(self.bus._fault, original)
+        self.assertTrue(self.bus.faulted)
+
     def test_known_partial_reply_is_discarded_before_bus_clear(self):
         self.backend.replies = [(b'1', False), (b'0000\n', True)]
         self.assertEqual(self.first.read_bytes(1), b'1')
@@ -119,6 +147,18 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual([e[2] for e in writes], [b'*IDN?\n', b'*IDN?\n'])
         self.assertEqual(self.bus.last_recovery['identity_attempts'], {8: 2})
         self.assertFalse(self.bus.faulted)
+
+    def test_pending_reply_blocks_other_address_reads_and_ren_without_bus_io(self):
+        self.backend.replies = [(b'1', False), (b'0000\n', True)]
+        self.first.read_bytes(1)
+        before = [e for e in self.backend.events if e[0] != 'timeout']
+        for operation in (self.other.read, self.other.read_raw,
+                          lambda: self.other.read_bytes(1), self.bus.enable_remote):
+            with self.subTest(operation=operation), self.assertRaises(ValueError):
+                operation()
+        self.assertEqual([e for e in self.backend.events if e[0] != 'timeout'], before)
+        self.assertFalse(self.bus.faulted)
+        self.assertEqual(self.first.read(), '0000')
 
     def test_identity_mismatch_keeps_controller_faulted(self):
         self.backend.replies = [(b'Expected\n', True)]

@@ -245,6 +245,8 @@ class Controller:
 
     def enable_remote(self, enabled=True):
         with self.transaction():
+            if self._pending_reads:
+                raise ValueError('Finish the pending reply or call recover() before changing REN')
             self._backend.remote(self._handle, bool(enabled))
 
     def check_srq(self):
@@ -336,7 +338,12 @@ class Instrument:
         with self._operation():
             return self._write(payload)
 
+    def _check_read_address(self):
+        if self.controller._pending_reads - {self.address}:
+            raise ValueError('Another instrument has an unfinished reply; finish it or call recover() before reading this address')
+
     def _read_message(self, text_termination):
+        self._check_read_address()
         chunk_size = _integer(self.chunk_size, "chunk_size", 1, 65535)
         limit = _integer(self.max_read_bytes, "max_read_bytes", 1, 2**31 - 1)
         term = _term(self.read_termination) if text_termination else None
@@ -364,6 +371,7 @@ class Instrument:
         count = _integer(count, "count", 1, 2**31 - 1)
         chunk_size = _integer(self.chunk_size, "chunk_size", 1, 65535)
         with self._operation():
+            self._check_read_address()
             term = _term(self.read_termination) if break_on_termchar else None
             eos = term.encode("ascii")[-1] if term else -1
             parts, total = [], 0

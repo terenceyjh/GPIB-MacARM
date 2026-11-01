@@ -21,8 +21,10 @@ class DistributionTests(unittest.TestCase):
     def test_portable_build_inputs_and_documentation_exist(self):
         for name in ("LICENSE", "THIRD_PARTY.md", "UPSTREAM.json", "pyproject.toml", "setup.py", "CLAUDE.md", "README.zh-CN.md",
                      "vendor/local-fixes.patch", "native/driver.cpp", "src/gpib_macarm/api.py",
-                     "docs/ARCHITECTURE.md", "docs/VALIDATION.md", "tools/make_delivery.py",
-                     "release/README.md", "release/README.zh-CN.md", "release/CLAUDE.md"):
+                     "docs/ARCHITECTURE.md", "docs/VALIDATION.md", "docs/BENCH_TESTS.md", "tools/make_delivery.py",
+                     "release/README.md", "release/README.zh-CN.md", "release/CLAUDE.md",
+                     "tests/test_driver.cpp", "tools/keithley_2400_acquire.py",
+                     "tools/keithley_2400_check.py", "tools/bus_smoke.py", "tools/bench_acceptance.py"):
             with self.subTest(file=name):
                 self.assertTrue((ROOT / name).is_file())
 
@@ -34,7 +36,8 @@ class DistributionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             public = ["README.md", "README.zh-CN.md", "CLAUDE.md", "docs/VALIDATION.md",
-                      "src/gpib_macarm/api.py", "vendor/kame/linux-gpib/COPYING"]
+                      "src/gpib_macarm/api.py", "vendor/kame/linux-gpib/COPYING",
+                      "tests/test_driver.cpp", "tools/bus_smoke.py", "tools/bench_acceptance.py", "docs/BENCH_TESTS.md"]
             private = ["AGENTS.md", "LOCAL_INSTALL.md", "GPIB_开发测试记录.md",
                        "local-notes/CLAUDE.md", "docs/MAC_ACCEPTANCE.md", "docs/private.md",
                        "build/validation/report.json", "tools/local_helper.py",

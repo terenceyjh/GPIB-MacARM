@@ -152,8 +152,24 @@ int parse_board_ibrd_readback(const uint8_t *raw, int raw_length,
     a=s.index("static int ni_usb_write("); b=s.index("int ni_usb_command_chunk(",a)
     chunk=s[a:b]
     chunk=replace(chunk,"\tni_usb_parse_status_block(in_data, &status);\n\tkfree(in_data);",
-                  "\tni_usb_parse_status_block(in_data, &status);\n\tkfree(in_data);\n\tif (status.id != 0x0d || status.count > length) return -EPROTO;")
-    s=s[:a]+chunk+s[b:]
+                  "\tif (kg_ni_parse_write_completion(in_data, usb_bytes_read, length, &status)) {\n"
+                  "\t\tkfree(in_data);\n\t\treturn -EPROTO;\n\t}\n\tkfree(in_data);")
+    write_parser = r'''/* gpib-macarm: validate a real NI write-completion frame before trusting its
+ * status/count. This never manufactures a missing acknowledgement. */
+int kg_ni_parse_write_completion(const uint8_t *raw, int raw_length, size_t requested,
+    struct ni_usb_status_block *status)
+{
+    if (!raw || !status || raw_length != 12 || requested == 0 || requested > 0xffff)
+        return -EPROTO;
+    if (raw[0] != 0x0d || raw[8] != NIUSB_TERM_ID || raw[9] || raw[10] || raw[11])
+        return -EPROTO;
+    ni_usb_parse_status_block(raw, status);
+    if (status->count > requested) return -EPROTO;
+    return 0;
+}
+
+'''
+    s=s[:a]+write_parser+chunk+s[b:]
     a=s.index("int ni_usb_command_chunk("); b=s.index("int ni_usb_command(",a)
     chunk=s[a:b]
     chunk=replace(chunk,"\tni_usb_parse_status_block(in_data, &status);\n\tkfree(in_data);",

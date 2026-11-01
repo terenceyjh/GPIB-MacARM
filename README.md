@@ -4,7 +4,7 @@
 
 [中文说明](README.zh-CN.md) · [Test summary](docs/VALIDATION.md) · [Agent guide & prompts](CLAUDE.md)
 
-GPIB-MacARM brings **GPIB instrument communication to Apple Silicon Macs**, currently through an **NI GPIB-USB-HS** adapter. It runs in userspace and currently provides **Python bindings and a command-line tool**, backed by a native C/C++ driver and C ABI. The driver core is adapted from **[KAME](https://github.com/northriv/KAME) / [linux-gpib](https://linux-gpib.sourceforge.io/)**.
+GPIB-MacARM brings **GPIB instrument communication to Apple Silicon Macs by Python**, currently through an **NI GPIB-USB-HS** adapter. It runs in userspace and currently provides **Python bindings and a command-line tool**, backed by a native C/C++ driver and C ABI. The driver core is adapted from **[KAME](https://github.com/northriv/KAME) / [linux-gpib](https://linux-gpib.sourceforge.io/)**.
 
 No NI-488.2, NI-VISA, kernel extension or background service is required. Install the package as `gpib-macarm`, then import `gpib_macarm`.
 
